@@ -1,0 +1,10 @@
+backend/antlr-4.13.1-complete.jar
+backend/minigo
+backend/output
+backend/output.ll
+backend/parser/*.interp
+backend/parser/*.tokens
+ide/dist/
+ide/node_modules/
+ide/output
+ide/output.ll
