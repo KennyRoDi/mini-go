@@ -64,6 +64,3 @@ The current version supports:
 *   **Full Struct Support:** Implementation of struct methods and attribute access.
 *   **Array & Slices:** Expansion of the type checker to handle complex collections.
 *   **Interactive Terminal:** Integration of `xterm.js` for a true console experience.
-
----
-Built with ❤️ by the Mini-GO Team.
