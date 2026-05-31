@@ -2,13 +2,13 @@
 
 Welcome to the **Mini-GO** project, a fully functional Desktop IDE and Compiler for a subset of the Go language. This project (codenamed **AlphaCompiler**) was built with strict adherence to architectural mandates, including linear symbol table management and native LLVM IR generation.
 
-## 🚀 Overview
+## Overview
 
 Mini-GO is designed to provide a high-fidelity development experience. The system is divided into two primary components:
 1.  **Backend (Go):** A high-performance compiler built with **ANTLR4** for lexical/syntactic analysis and **llir/llvm** for code generation.
 2.  **Frontend (Electron + TypeScript):** A professional, dark-themed IDE with a focused workspace and integrated terminal.
 
-## 🏗️ Technical Architecture
+## Technical Architecture
 
 ### 1. Compiler Backend
 *   **Parser/Lexer:** Generated via ANTLR4 (Go target).
@@ -24,7 +24,7 @@ Mini-GO is designed to provide a high-fidelity development experience. The syste
 *   **Icons:** Lucide React icons for a professional look.
 *   **IPC:** Spawns the Go compiler as a child process and parses real-time diagnostics.
 
-## 📥 Onboarding & Requirements
+## Onboarding & Requirements
 
 To run this project, you need the following tools installed:
 
@@ -33,7 +33,7 @@ To run this project, you need the following tools installed:
 3.  **Clang:** Required by the backend to link LLVM IR into executables.
 4.  **Java (JRE):** Only if you need to regenerate the ANTLR4 parser from the `.g4` file.
 
-## 🛠️ Execution Steps
+## Execution Steps
 
 ### 1. Build the Compiler Backend
 Navigate to the backend directory and compile the `minigo` binary:
@@ -51,7 +51,7 @@ npm install
 npm run start
 ```
 
-## ⌨️ Mini-GO Language Features
+## Mini-GO Language Features
 The current version supports:
 *   **Variable Declarations:** `var x int = 10;`
 *   **Arithmetic:** `+`, `-`, `*`, `/` (Integer only for now).
@@ -59,7 +59,7 @@ The current version supports:
 *   **Standard I/O:** `print()` and `println()` (mapped to native `printf`).
 *   **Main Entry:** Automatic synthesis of `func main()` for global statements.
 
-## 📈 Future Improvements
+## Future Improvements
 *   **Monaco Editor:** Integration for real syntax highlighting and error squiggles.
 *   **Full Struct Support:** Implementation of struct methods and attribute access.
 *   **Array & Slices:** Expansion of the type checker to handle complex collections.
