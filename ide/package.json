@@ -1,0 +1,13 @@
+{
+  "name": "minigo-ide",
+  "version": "1.0.0",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "npm run build && electron ."
+  },
+  "devDependencies": {
+    "electron": "^42.3.0",
+    "typescript": "^5.0.0"
+  }
+}

@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Mini-GO IDE</title>
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --bg-activity: #181818;
+            --bg-sidebar: #252526;
+            --bg-editor: #1e1e1e;
+            --bg-panel: #1e1e1e;
+            --accent: #4ec9b0;
+            --accent-hover: #3da894;
+            --text-main: #cccccc;
+            --text-muted: #858585;
+            --border: #333333;
+            --cyan-run: #5fb3b3;
+        }
+
+        body, html { 
+            margin: 0; 
+            padding: 0; 
+            height: 100vh; 
+            overflow: hidden; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg-activity);
+            color: var(--text-main);
+        }
+
+        .app-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Activity Bar (Icons on the far left) */
+        .activity-bar {
+            width: 50px;
+            background: var(--bg-activity);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 15px;
+            border-right: 1px solid var(--border);
+            gap: 20px;
+        }
+        .activity-icon {
+            color: var(--text-muted);
+            cursor: pointer;
+            width: 24px;
+            height: 24px;
+        }
+        .activity-icon.active { color: #fff; border-left: 2px solid #fff; padding-left: 5px; margin-left: -7px; }
+
+        /* Sidebar (Explorer) */
+        .sidebar {
+            width: 250px;
+            background: var(--bg-sidebar);
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border);
+        }
+        .sidebar-header {
+            padding: 10px 15px;
+            font-size: 11px;
+            font-weight: bold;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .file-tree {
+            flex: 1;
+            padding: 5px 0;
+        }
+        .file-item {
+            padding: 5px 20px;
+            font-size: 13px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .file-item:hover { background: #2a2d2e; }
+        .file-item.active { background: #37373d; color: #fff; }
+        .file-icon { color: var(--cyan-run); width: 16px; height: 16px; }
+
+        /* Main Content Stage */
+        .main-stage {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-editor);
+        }
+
+        /* Header / Tabs */
+        .header {
+            height: 50px;
+            background: var(--bg-activity);
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            border-bottom: 1px solid var(--border);
+            justify-content: space-between;
+        }
+        .app-name { font-weight: 600; color: #fff; font-size: 16px; margin-right: 40px; }
+        .tabs { display: flex; height: 100%; align-items: flex-end; }
+        .tab {
+            padding: 10px 20px;
+            background: var(--bg-sidebar);
+            font-size: 13px;
+            color: var(--text-muted);
+            border-top: 1px solid transparent;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 120px;
+            justify-content: center;
+        }
+        .tab.active {
+            background: var(--bg-editor);
+            color: #fff;
+            border-top: 1px solid var(--cyan-run);
+        }
+
+        .actions { display: flex; align-items: center; gap: 15px; }
+        .run-btn {
+            background: var(--cyan-run);
+            color: #1e1e1e;
+            border: none;
+            padding: 6px 16px;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: 13px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .run-btn:hover { opacity: 0.9; }
+        .run-icon { width: 14px; height: 14px; fill: currentColor; }
+
+        /* Editor Area */
+        .editor-wrap {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+            position: relative;
+        }
+        #editor {
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            color: #d4d4d4;
+            font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+            font-size: 15px;
+            line-height: 1.5;
+            padding: 20px;
+            border: none;
+            resize: none;
+            outline: none;
+            box-sizing: border-box;
+        }
+
+        /* Bottom Panel (Terminal) */
+        .bottom-panel {
+            height: 250px;
+            background: var(--bg-panel);
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+        .panel-tabs {
+            display: flex;
+            padding: 0 15px;
+            border-bottom: 1px solid var(--border);
+            gap: 20px;
+        }
+        .panel-tab {
+            padding: 10px 0;
+            font-size: 11px;
+            font-weight: bold;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+        }
+        .panel-tab.active {
+            color: #fff;
+            border-bottom: 2px solid var(--cyan-run);
+        }
+
+        .terminal-content {
+            flex: 1;
+            padding: 15px;
+            font-family: 'Consolas', monospace;
+            font-size: 13px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            color: #ccc;
+        }
+        .terminal-prompt { color: var(--cyan-run); margin-right: 8px; }
+        .error-text { color: #f48771; }
+        .success-text { color: #89d185; }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Activity Bar -->
+        <div class="activity-bar">
+            <i data-lucide="files" class="activity-icon active"></i>
+            <i data-lucide="settings" class="activity-icon" style="margin-top: auto; margin-bottom: 15px;"></i>
+        </div>
+
+        <!-- Sidebar Explorer -->
+        <div class="sidebar">
+            <div class="sidebar-header">Explorer</div>
+            <div class="file-tree">
+                <div class="file-item active"><i data-lucide="file-code" class="file-icon"></i> main.go</div>
+            </div>
+        </div>
+
+        <!-- Main Stage -->
+        <div class="main-stage">
+            <div class="header">
+                <div style="display:flex; align-items:center;">
+                    <div class="app-name">MiniGo</div>
+                    <div class="tabs">
+                        <div class="tab active"><i data-lucide="file-code" class="file-icon" style="width: 14px;"></i> main.go</div>
+                    </div>
+                </div>
+                <div class="actions">
+                    <button class="run-btn" id="runBtn"><i data-lucide="play" class="run-icon"></i> Run</button>
+                </div>
+            </div>
+
+            <div class="editor-wrap">
+                <textarea id="editor" spellcheck="false">package main;
+
+var x int = 10;
+var y int = 20;
+
+func main() {
+    var z int = x + y;
+    print(z);
+};</textarea>
+            </div>
+
+            <!-- Bottom Panel -->
+            <div class="bottom-panel">
+                <div class="panel-tabs">
+                    <div class="panel-tab active">Terminal</div>
+                </div>
+                <div class="terminal-content" id="terminal">
+                    <div><span class="terminal-prompt">~/workspace/project $</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        const { ipcRenderer } = require('electron');
+        const editor = document.getElementById('editor');
+        const terminal = document.getElementById('terminal');
+        const runBtn = document.getElementById('runBtn');
+
+        runBtn.onclick = async () => {
+            appendTerminalLine('go run main.go', 'prompt');
+            
+            const result = await ipcRenderer.invoke('compile', editor.value);
+            
+            const lines = result.output.split('\n');
+            lines.forEach(line => {
+                if (line.trim()) {
+                    if (line.includes('ERROR')) {
+                        appendTerminalLine(line, 'error');
+                    } else {
+                        appendTerminalLine(line, 'default');
+                    }
+                }
+            });
+
+            if (result.success && !result.output.includes('ERROR')) {
+                appendTerminalLine('Process finished with exit code 0', 'success');
+            } else if (!result.success) {
+                appendTerminalLine('Process finished with errors', 'error');
+            }
+            
+            appendTerminalLine('', 'prompt');
+        };
+
+        function appendTerminalLine(text, type) {
+            const div = document.createElement('div');
+            if (type === 'prompt') {
+                div.innerHTML = `<span class="terminal-prompt">~/workspace/project $</span> ${text}`;
+            } else {
+                div.textContent = text;
+                if (type === 'error') div.className = 'error-text';
+                if (type === 'success') {
+                    div.className = 'success-text';
+                    div.style.marginTop = '10px';
+                }
+            }
+            terminal.appendChild(div);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+    </script>
+</body>
+</html>
