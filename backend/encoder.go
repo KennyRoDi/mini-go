@@ -122,6 +122,9 @@ func (v *MiniGoEncoder) VisitStatementList(ctx *parser.StatementListContext) int
 }
 
 func (v *MiniGoEncoder) VisitSingleVarDecl(ctx *parser.SingleVarDeclContext) interface{} {
+	if ctx.IdentifierList() == nil {
+		return nil
+	}
 	for _, id := range ctx.IdentifierList().AllIDENTIFIER() {
 		name := id.GetText()
 		var t Type = T_UNKNOWN
@@ -449,7 +452,9 @@ func (v *MiniGoEncoder) VisitStatement(ctx *parser.StatementContext) interface{}
 			if ctx.ExpressionList() != nil {
 				exprs := ctx.ExpressionList().(*parser.ExpressionListContext).AllExpression()
 				for _, expr := range exprs {
-					val := expr.Accept(v).(value.Value)
+					res := expr.Accept(v)
+					if res == nil { continue }
+					val := res.(value.Value)
 					t := v.NodeTypes[expr]
 					
 					formatStr := "%d"
