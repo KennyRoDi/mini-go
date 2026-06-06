@@ -13,9 +13,9 @@ import (
 	"minigo-backend/parser"
 )
 
-// AlphaCompilerEncoder implements the mandated LLVM code generation.
-type AlphaCompilerEncoder struct {
-	*parser.BaseAlphaCompilerVisitor
+// MiniGoEncoder implements the mandated LLVM code generation.
+type MiniGoEncoder struct {
+	*parser.BaseminigoVisitor
 	Module *ir.Module
 	
 	// IdentityHashMap as mandated: maps AST node reference to LLVM value reference.
@@ -32,23 +32,23 @@ type AlphaCompilerEncoder struct {
 	printf *ir.Func
 }
 
-func NewAlphaCompilerEncoder(symbols *TablaSimbolos) *AlphaCompilerEncoder {
+func NewMiniGoEncoder(symbols *TablaSimbolos) *MiniGoEncoder {
 	mod := ir.NewModule()
 	
 	// Declare printf: i32 printf(i8*, ...)
 	printf := mod.NewFunc("printf", types.I32, ir.NewParam("format", types.NewPointer(types.I8)))
 	printf.Sig.Variadic = true
 
-	return &AlphaCompilerEncoder{
-		BaseAlphaCompilerVisitor: &parser.BaseAlphaCompilerVisitor{},
-		Module:                   mod,
-		valorLLVM:                make(map[interface{}]value.Value),
-		Symbols:                  symbols,
-		printf:                   printf,
+	return &MiniGoEncoder{
+		BaseminigoVisitor: &parser.BaseminigoVisitor{},
+		Module:            mod,
+		valorLLVM:         make(map[interface{}]value.Value),
+		Symbols:           symbols,
+		printf:            printf,
 	}
 }
 
-func (v *AlphaCompilerEncoder) VisitRoot(ctx *parser.RootContext) interface{} {
+func (v *MiniGoEncoder) VisitRoot(ctx *parser.RootContext) interface{} {
 	// Automatically synthesize an implicit LLVM main function.
 	mainFunc := v.Module.NewFunc("main", types.I32)
 	entryBlock := mainFunc.NewBlock("entry")
@@ -68,7 +68,7 @@ func (v *AlphaCompilerEncoder) VisitRoot(ctx *parser.RootContext) interface{} {
 	return nil
 }
 
-func (v *AlphaCompilerEncoder) VisitTopDeclarationList(ctx *parser.TopDeclarationListContext) interface{} {
+func (v *MiniGoEncoder) VisitTopDeclarationList(ctx *parser.TopDeclarationListContext) interface{} {
 	for _, child := range ctx.GetChildren() {
 		if node, ok := child.(antlr.ParseTree); ok {
 			node.Accept(v)
@@ -77,7 +77,7 @@ func (v *AlphaCompilerEncoder) VisitTopDeclarationList(ctx *parser.TopDeclaratio
 	return nil
 }
 
-func (v *AlphaCompilerEncoder) VisitVariableDecl(ctx *parser.VariableDeclContext) interface{} {
+func (v *MiniGoEncoder) VisitVariableDecl(ctx *parser.VariableDeclContext) interface{} {
 	for _, child := range ctx.GetChildren() {
 		if node, ok := child.(antlr.ParseTree); ok {
 			node.Accept(v)
@@ -86,7 +86,7 @@ func (v *AlphaCompilerEncoder) VisitVariableDecl(ctx *parser.VariableDeclContext
 	return nil
 }
 
-func (v *AlphaCompilerEncoder) VisitSingleVarDecl(ctx *parser.SingleVarDeclContext) interface{} {
+func (v *MiniGoEncoder) VisitSingleVarDecl(ctx *parser.SingleVarDeclContext) interface{} {
 	for _, id := range ctx.IdentifierList().AllIDENTIFIER() {
 		name := id.GetText()
 		alloc := v.currBlock.NewAlloca(types.I32)
@@ -106,7 +106,7 @@ func (v *AlphaCompilerEncoder) VisitSingleVarDecl(ctx *parser.SingleVarDeclConte
 	return nil
 }
 
-func (v *AlphaCompilerEncoder) VisitFuncDecl(ctx *parser.FuncDeclContext) interface{} {
+func (v *MiniGoEncoder) VisitFuncDecl(ctx *parser.FuncDeclContext) interface{} {
 	// For this prototype, we visit the body and inline it into 'main'
 	// to ensure 'print' statements at the top level work.
 	for _, child := range ctx.GetChildren() {
@@ -117,7 +117,7 @@ func (v *AlphaCompilerEncoder) VisitFuncDecl(ctx *parser.FuncDeclContext) interf
 	return nil
 }
 
-func (v *AlphaCompilerEncoder) VisitBlock(ctx *parser.BlockContext) interface{} {
+func (v *MiniGoEncoder) VisitBlock(ctx *parser.BlockContext) interface{} {
 	for _, child := range ctx.GetChildren() {
 		if node, ok := child.(antlr.ParseTree); ok {
 			node.Accept(v)
@@ -126,7 +126,7 @@ func (v *AlphaCompilerEncoder) VisitBlock(ctx *parser.BlockContext) interface{} 
 	return nil
 }
 
-func (v *AlphaCompilerEncoder) VisitStatementList(ctx *parser.StatementListContext) interface{} {
+func (v *MiniGoEncoder) VisitStatementList(ctx *parser.StatementListContext) interface{} {
 	for _, child := range ctx.GetChildren() {
 		if node, ok := child.(antlr.ParseTree); ok {
 			node.Accept(v)
@@ -135,7 +135,7 @@ func (v *AlphaCompilerEncoder) VisitStatementList(ctx *parser.StatementListConte
 	return nil
 }
 
-func (v *AlphaCompilerEncoder) VisitStatement(ctx *parser.StatementContext) interface{} {
+func (v *MiniGoEncoder) VisitStatement(ctx *parser.StatementContext) interface{} {
 	if ctx.GetChildCount() > 0 {
 		var childText string
 		if terminal, ok := ctx.GetChild(0).(antlr.TerminalNode); ok {
@@ -175,18 +175,18 @@ func (v *AlphaCompilerEncoder) VisitStatement(ctx *parser.StatementContext) inte
 	return nil
 }
 
-func (v *AlphaCompilerEncoder) VisitPrimaryExpr(ctx *parser.PrimaryExprContext) interface{} {
+func (v *MiniGoEncoder) VisitPrimaryExpr(ctx *parser.PrimaryExprContext) interface{} {
 	return ctx.PrimaryExpression().Accept(v)
 }
 
-func (v *AlphaCompilerEncoder) VisitPrimaryExpression(ctx *parser.PrimaryExpressionContext) interface{} {
+func (v *MiniGoEncoder) VisitPrimaryExpression(ctx *parser.PrimaryExpressionContext) interface{} {
 	if ctx.Operand() != nil {
 		return ctx.Operand().Accept(v)
 	}
 	return nil
 }
 
-func (v *AlphaCompilerEncoder) VisitOperand(ctx *parser.OperandContext) interface{} {
+func (v *MiniGoEncoder) VisitOperand(ctx *parser.OperandContext) interface{} {
 	if ctx.Literal() != nil {
 		return ctx.Literal().Accept(v)
 	}
@@ -205,7 +205,7 @@ func (v *AlphaCompilerEncoder) VisitOperand(ctx *parser.OperandContext) interfac
 	return nil
 }
 
-func (v *AlphaCompilerEncoder) VisitLiteral(ctx *parser.LiteralContext) interface{} {
+func (v *MiniGoEncoder) VisitLiteral(ctx *parser.LiteralContext) interface{} {
 	if ctx.INTLITERAL() != nil {
 		var val int64
 		fmt.Sscanf(ctx.INTLITERAL().GetText(), "%d", &val)
@@ -214,7 +214,7 @@ func (v *AlphaCompilerEncoder) VisitLiteral(ctx *parser.LiteralContext) interfac
 	return constant.NewInt(types.I32, 0)
 }
 
-func (v *AlphaCompilerEncoder) VisitAddExpr(ctx *parser.AddExprContext) interface{} {
+func (v *MiniGoEncoder) VisitAddExpr(ctx *parser.AddExprContext) interface{} {
 	left := ctx.Expression(0).Accept(v)
 	right := ctx.Expression(1).Accept(v)
 	if left != nil && right != nil {
@@ -223,7 +223,7 @@ func (v *AlphaCompilerEncoder) VisitAddExpr(ctx *parser.AddExprContext) interfac
 	return nil
 }
 
-func (v *AlphaCompilerEncoder) Emit(outPath string) error {
+func (v *MiniGoEncoder) Emit(outPath string) error {
 	irContent := v.Module.String()
 	irFile := outPath + ".ll"
 	err := os.WriteFile(irFile, []byte(irContent), 0644)

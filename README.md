@@ -1,17 +1,17 @@
 # Mini-GO Compiler & Desktop IDE
 
-Welcome to the **Mini-GO** project, a fully functional Desktop IDE and Compiler for a subset of the Go language. This project (codenamed **AlphaCompiler**) was built with strict adherence to architectural mandates, including linear symbol table management and native LLVM IR generation.
+---
 
 ## Overview
 
-Mini-GO is designed to provide a high-fidelity development experience. The system is divided into two primary components:
+**Mini-GO** is designed to provide a high-fidelity development experience. The system is divided into two primary components:
 1.  **Backend (Go):** A high-performance compiler built with **ANTLR4** for lexical/syntactic analysis and **llir/llvm** for code generation.
 2.  **Frontend (Electron + TypeScript):** A professional, dark-themed IDE with a focused workspace and integrated terminal.
 
 ## Technical Architecture
 
 ### 1. Compiler Backend
-*   **Parser/Lexer:** Generated via ANTLR4 (Go target).
+*   **Parser/Lexer:** Generated via ANTLR4 (Go target) using `minigo.g4`.
 *   **Symbol Table:** Implemented as a linear sequential list (`O(n)` lookups) with scope-based purging, as per architectural requirements.
 *   **Type System:** Uses hardcoded magic numbers (`0=int`, `1=char`, `2=bool`, `3=string`, `4=void`).
 *   **Semantic Passes:** 
@@ -38,7 +38,7 @@ To run this project, you need the following tools installed:
 ### 1. Build the Compiler Backend
 Navigate to the backend directory and compile the `minigo` binary:
 ```bash
-cd MiniGo/backend
+cd mini-go/backend
 go mod tidy
 go build -o minigo .
 ```

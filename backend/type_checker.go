@@ -12,16 +12,16 @@ type TypeErrorException struct {
 }
 
 type TypeVisitor struct {
-	*parser.BaseAlphaCompilerVisitor
+	*parser.BaseminigoVisitor
 	Symbols *TablaSimbolos
 	Errors  []string
 }
 
 func NewTypeVisitor(symbols *TablaSimbolos) *TypeVisitor {
 	return &TypeVisitor{
-		BaseAlphaCompilerVisitor: &parser.BaseAlphaCompilerVisitor{},
-		Symbols:                  symbols,
-		Errors:                   []string{},
+		BaseminigoVisitor: &parser.BaseminigoVisitor{},
+		Symbols:           symbols,
+		Errors:            []string{},
 	}
 }
 
@@ -233,20 +233,36 @@ func (v *TypeVisitor) VisitRelExpr(ctx *parser.RelExprContext) interface{} {
 }
 
 func (v *TypeVisitor) VisitIfStatement(ctx *parser.IfStatementContext) interface{} {
-	res := ctx.Expression().Accept(v)
-	if res != nil {
-		condType := res.(int)
-		if condType != T_BOOL {
-			v.reportError("Condicion no booleana", 
-				fmt.Sprintf("el if requiere bool, se encontro %d", condType), ctx)
+	if ctx.SimpleStatement() != nil {
+		ctx.SimpleStatement().Accept(v)
+	}
+	
+	if ctx.Expression() != nil {
+		res := ctx.Expression().Accept(v)
+		if res != nil {
+			condType := res.(int)
+			if condType != T_BOOL {
+				v.reportError("Condicion no booleana", 
+					fmt.Sprintf("el if requiere bool, se encontro %d", condType), ctx)
+			}
 		}
 	}
+	
+	// Visit the main block
 	if ctx.Block(0) != nil {
 		ctx.Block(0).Accept(v)
 	}
+	
+	// Visit the 'else' block if present
 	if len(ctx.AllBlock()) > 1 {
 		ctx.Block(1).Accept(v)
 	}
+	
+	// Visit the 'else if' statement if present
+	if ctx.IfStatement() != nil {
+		ctx.IfStatement().Accept(v)
+	}
+	
 	return nil
 }
 

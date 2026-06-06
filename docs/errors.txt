@@ -1,0 +1,28 @@
+* **Error 1: Precedencia invertida en expresiones**
+* **Lo que dice el archivo base:** Define las expresiones primarias (como variables, llamadas a funciones y accesos) con la mayor prioridad, y las expresiones unarias (`+`, `-`, `!`, `^`) en un nivel inferior o posterior.
+* **Lo que tiene mi grammar:** Coloca las expresiones unarias arriba de `primaryExpression`, dándoles la mayor prioridad de evaluación.
+* **Cómo solucionarlo:** Mueve `primaryExpression` a la primera posición dentro de la regla `expression`, y pasa todas las reglas unarias abajo, después de las expresiones binarias (como `||`).
+
+
+* **Error 2: Manejo incorrecto del operador compuesto `&^**`
+* **Lo que dice el archivo base:** Especifica el operador de bitwise clear como un único elemento continuo en las expresiones binarias.
+* **Lo que tiene mi grammar:** Utiliza la cadena literal `'&^'` y el operador de asignación `'&^='` de forma directa en las reglas sintácticas del parser. Al ser caracteres individuales, el lexer de ANTLR podría fragmentarlos en tokens separados (`&` y `^`), generando un fallo sintáctico.
+* **Cómo solucionarlo:** Define una regla de lexer específica para este token compuesto (por ejemplo, `BIT_CLEAR: '&^';` y `BIT_CLEAR_ASSIGN: '&^=';`) en la sección final, y utiliza dichos nombres de token dentro de la regla `expression` y `assignmentStatement`.
+
+
+* **Error 3: Factorización inválida en sentencias `if` (`ifStatement`)**
+* **Lo que dice el archivo base:** Define explícitamente 6 producciones planas e independientes para cubrir todas las combinaciones posibles de `if` con o sin inicializador (`simpleStatement`), y con cláusulas `else if` o `else` en bloque.
+* **Lo que tiene mi grammar:** Compacta las 6 opciones en solo 2 producciones utilizando agrupaciones y operadores opcionales `(...)?`. Esto altera los nombres y la forma del árbol sintáctico (AST) generado.
+* **Cómo solucionarlo:** Desenrolla la regla y escribe de forma explícita las 6 alternativas independientes, separadas por el operador `|`, tal y como aparecen listadas en el documento original.
+
+
+* **Error 4: Restricción incorrecta en el ciclo `for` de tres componentes (`loop`)**
+* **Lo que dice el archivo base:** En su tercera variante obligatoria (`'for' simpleStatement ';' ';' simpleStatement block`), exige que el espacio de la condición central quede vacío, pero obliga a que existan tanto el primer `simpleStatement` como el segundo de manera fija.
+* **Lo que tiene mi grammar:** Estructura la regla como `'for' simpleStatement ';' ( expression )? ';' ( simpleStatement )? block`. Esto hace que el segundo `simpleStatement` sea opcional, permitiendo una sintaxis inválida para el lenguaje base (como `for x++; ; block`).
+* **Cómo solucionarlo:** Divide la regla en producciones separadas. Crea una alternativa específica para el bucle tradicional de tres elementos, y otra alternativa fija para el caso donde la expresión intermedia es nula (`'for' simpleStatement ';' ';' simpleStatement block`), removiendo los cierres opcionales `?`.
+
+
+* **Error 5: Permisividad excesiva en la estructura de `switch_stmt**`
+* **Lo que dice el archivo base:** Define exactamente 4 combinaciones válidas y estrictas para la cabecera del switch.
+* **Lo que tiene mi grammar:** Agrupa la cabecera usando opcionales consecutivos: `'switch' ( simpleStatement ';' )? ( expression )?`. Esta combinación genera sobre-permisividad sintáctica, aceptando estructuras erróneas no contempladas por el documento base.
+* **Cómo solucionarlo:** Elimina las agrupaciones opcionales `(...)?` y despliega textualmente las 4 variantes de la regla `switch` de manera lineal y secuencial.

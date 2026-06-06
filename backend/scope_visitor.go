@@ -7,16 +7,16 @@ import (
 )
 
 type ScopeVisitor struct {
-	*parser.BaseAlphaCompilerVisitor
+	*parser.BaseminigoVisitor
 	Symbols *TablaSimbolos
 	Errors  []string
 }
 
 func NewScopeVisitor() *ScopeVisitor {
 	return &ScopeVisitor{
-		BaseAlphaCompilerVisitor: &parser.BaseAlphaCompilerVisitor{},
-		Symbols:                  NewTablaSimbolos(),
-		Errors:                   []string{},
+		BaseminigoVisitor: &parser.BaseminigoVisitor{},
+		Symbols:           NewTablaSimbolos(),
+		Errors:            []string{},
 	}
 }
 

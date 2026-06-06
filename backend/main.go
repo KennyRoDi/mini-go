@@ -22,7 +22,7 @@ func main() {
 	}
 
 	// Lexer
-	lexer := parser.NewAlphaCompilerLexer(input)
+	lexer := parser.NewminigoLexer(input)
 	lexerErrors := NewCustomErrorListener()
 	lexer.RemoveErrorListeners()
 	lexer.AddErrorListener(lexerErrors)
@@ -30,7 +30,7 @@ func main() {
 	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
 
 	// Parser
-	p := parser.NewAlphaCompilerParser(stream)
+	p := parser.NewminigoParser(stream)
 	parserErrors := NewCustomErrorListener()
 	p.RemoveErrorListeners()
 	p.AddErrorListener(parserErrors)
@@ -67,7 +67,7 @@ func main() {
 	}
 
 	// Fase de Generacion de Codigo (LLVM IR)
-	encoder := NewAlphaCompilerEncoder(symbols)
+	encoder := NewMiniGoEncoder(symbols)
 	tree.Accept(encoder)
 
 	outPath := "output"
