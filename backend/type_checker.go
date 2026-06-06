@@ -13,8 +13,10 @@ type TypeErrorException struct {
 
 type TypeVisitor struct {
 	*parser.BaseminigoVisitor
-	Symbols *TablaSimbolos
-	Errors  []string
+	Symbols   *TablaSimbolos
+	Errors    []string
+	NodeTypes map[antlr.ParseTree]Type
+	SymbolMap map[antlr.ParseTree]*Ident
 }
 
 func NewTypeVisitor(symbols *TablaSimbolos) *TypeVisitor {
@@ -22,14 +24,14 @@ func NewTypeVisitor(symbols *TablaSimbolos) *TypeVisitor {
 		BaseminigoVisitor: &parser.BaseminigoVisitor{},
 		Symbols:           symbols,
 		Errors:            []string{},
+		NodeTypes:         make(map[antlr.ParseTree]Type),
+		SymbolMap:         make(map[antlr.ParseTree]*Ident),
 	}
 }
 
 func (v *TypeVisitor) reportError(msg string, detail string, ctx antlr.ParserRuleContext) {
 	line := ctx.GetStart().GetLine()
 	column := ctx.GetStart().GetColumn()
-	// Format strictly according to SPEC.md:
-	// ERROR DE TIPO: <mensaje> (<detalle>) [linea:<L> - columna:<C>]
 	errorStr := fmt.Sprintf("ERROR DE TIPO: %s (%s) [linea:%d - columna:%d]", msg, detail, line, column)
 	v.Errors = append(v.Errors, errorStr)
 	panic(TypeErrorException{Message: errorStr})
@@ -39,7 +41,6 @@ func (v *TypeVisitor) visitIsolated(ctx antlr.ParseTree) {
 	defer func() {
 		if r := recover(); r != nil {
 			if _, ok := r.(TypeErrorException); ok {
-				// Halt current branch, but continue other branches
 			} else {
 				panic(r)
 			}
@@ -50,11 +51,33 @@ func (v *TypeVisitor) visitIsolated(ctx antlr.ParseTree) {
 	}
 }
 
+func (v *TypeVisitor) resolveType(ctx parser.IDeclTypeContext) Type {
+	if ctx == nil { return T_UNKNOWN }
+	if ctx.IDENTIFIER() != nil {
+		return GetBasicType(ctx.IDENTIFIER().GetText())
+	}
+	if ctx.SliceDeclType() != nil {
+		return SliceType{Elem: v.resolveType(ctx.SliceDeclType().DeclType())}
+	}
+	if ctx.ArrayDeclType() != nil {
+		var size int
+		fmt.Sscanf(ctx.ArrayDeclType().INTLITERAL().GetText(), "%d", &size)
+		return ArrayType{Elem: v.resolveType(ctx.ArrayDeclType().DeclType()), Size: size}
+	}
+	if ctx.StructDeclType() != nil {
+		return StructType{Fields: make(map[string]Type)}
+	}
+	if ctx.DeclType() != nil {
+		return v.resolveType(ctx.DeclType())
+	}
+	return T_UNKNOWN
+}
+
 // --- VISITOR METHODS ---
 
 func (v *TypeVisitor) VisitRoot(ctx *parser.RootContext) interface{} {
 	if ctx.TopDeclarationList() != nil {
-		ctx.TopDeclarationList().Accept(v)
+		return ctx.TopDeclarationList().Accept(v)
 	}
 	return nil
 }
@@ -77,27 +100,68 @@ func (v *TypeVisitor) VisitVariableDecl(ctx *parser.VariableDeclContext) interfa
 	return nil
 }
 
+func (v *TypeVisitor) VisitStatementList(ctx *parser.StatementListContext) interface{} {
+	for _, child := range ctx.GetChildren() {
+		if node, ok := child.(antlr.ParseTree); ok {
+			node.Accept(v)
+		}
+	}
+	return nil
+}
+
+func (v *TypeVisitor) VisitExpressionList(ctx *parser.ExpressionListContext) interface{} {
+	for _, child := range ctx.GetChildren() {
+		if node, ok := child.(antlr.ParseTree); ok {
+			node.Accept(v)
+		}
+	}
+	return nil
+}
+
+func (v *TypeVisitor) VisitArguments(ctx *parser.ArgumentsContext) interface{} {
+	if ctx.ExpressionList() != nil {
+		ctx.ExpressionList().Accept(v)
+	}
+	return nil
+}
+
 func (v *TypeVisitor) VisitSingleVarDecl(ctx *parser.SingleVarDeclContext) interface{} {
-	targetType := T_UNKNOWN
+	var targetType Type = T_UNKNOWN
 	if ctx.DeclType() != nil {
-		targetType = GetMagicType(ctx.DeclType().GetText())
+		targetType = v.resolveType(ctx.DeclType())
+	}
+
+	var exprTypes []Type
+	if ctx.ExpressionList() != nil {
+		list := ctx.ExpressionList().(*parser.ExpressionListContext)
+		for _, expr := range list.AllExpression() {
+			res := expr.Accept(v)
+			if res != nil {
+				exprTypes = append(exprTypes, res.(Type))
+			}
+		}
+	}
+
+	// Type Inference
+	if targetType.Equals(T_UNKNOWN) && len(exprTypes) > 0 {
+		targetType = exprTypes[0]
 	}
 
 	if ctx.IdentifierList() != nil {
 		for _, id := range ctx.IdentifierList().AllIDENTIFIER() {
 			v.Symbols.Insert(id.GetText(), targetType)
+			v.NodeTypes[id] = targetType
+			if ident, found := v.Symbols.Lookup(id.GetText()); found {
+				v.SymbolMap[id] = ident
+			}
 		}
 	}
 
-	if ctx.ExpressionList() != nil {
-		exprs := ctx.ExpressionList().AllExpression()
-		for _, expr := range exprs {
-			result := expr.Accept(v)
-			if result == nil { continue }
-			exprType := result.(int)
-			if targetType != T_UNKNOWN && exprType != targetType {
+	if !targetType.Equals(T_UNKNOWN) && len(exprTypes) > 0 {
+		for _, et := range exprTypes {
+			if !targetType.Equals(et) {
 				v.reportError("Incompatibilidad de tipos", 
-					fmt.Sprintf("no se puede asignar tipo %d a variable de tipo %d", exprType, targetType), ctx)
+					fmt.Sprintf("no se puede asignar tipo %s a variable de tipo %s", et.String(), targetType.String()), ctx)
 			}
 		}
 	}
@@ -105,41 +169,51 @@ func (v *TypeVisitor) VisitSingleVarDecl(ctx *parser.SingleVarDeclContext) inter
 }
 
 func (v *TypeVisitor) VisitSingleVarDeclNoExps(ctx *parser.SingleVarDeclNoExpsContext) interface{} {
-	targetType := T_UNKNOWN
+	var targetType Type = T_UNKNOWN
 	if ctx.DeclType() != nil {
-		targetType = GetMagicType(ctx.DeclType().GetText())
+		targetType = v.resolveType(ctx.DeclType())
 	}
-
 	if ctx.IdentifierList() != nil {
 		for _, id := range ctx.IdentifierList().AllIDENTIFIER() {
 			v.Symbols.Insert(id.GetText(), targetType)
+			v.NodeTypes[id] = targetType
+			if ident, found := v.Symbols.Lookup(id.GetText()); found {
+				v.SymbolMap[id] = ident
+			}
 		}
 	}
 	return nil
 }
 
 func (v *TypeVisitor) VisitFuncDecl(ctx *parser.FuncDeclContext) interface{} {
+	funcFront := ctx.FuncFrontDecl().(*parser.FuncFrontDeclContext)
+	funcName := funcFront.IDENTIFIER().GetText()
+	
+	var tipoRetorno Type = T_VOID
+	if funcFront.DeclType() != nil {
+		tipoRetorno = v.resolveType(funcFront.DeclType())
+	}
+	
+	v.Symbols.Insert(funcName, tipoRetorno)
+	v.SymbolMap[funcFront.IDENTIFIER()] = &Ident{Nombre: funcName, Tipo: tipoRetorno, Nivel: v.Symbols.NivelActual}
+
 	v.Symbols.OpenScope()
-	if ctx.FuncFrontDecl() != nil {
-		ctx.FuncFrontDecl().Accept(v)
-	}
-	if ctx.Block() != nil {
-		ctx.Block().Accept(v)
-	}
-	v.Symbols.CloseScope()
+	defer v.Symbols.CloseScope()
+	if ctx.FuncFrontDecl() != nil { ctx.FuncFrontDecl().Accept(v) }
+	if ctx.Block() != nil { ctx.Block().Accept(v) }
 	return nil
 }
 
 func (v *TypeVisitor) VisitFuncFrontDecl(ctx *parser.FuncFrontDeclContext) interface{} {
-	return v.VisitChildren(ctx)
+	if ctx.FuncArgDecls() != nil {
+		ctx.FuncArgDecls().Accept(v)
+	}
+	return nil
 }
 
 func (v *TypeVisitor) VisitFuncArgDecls(ctx *parser.FuncArgDeclsContext) interface{} {
 	for _, decl := range ctx.AllSingleVarDeclNoExps() {
-		tipo := GetMagicType(decl.DeclType().GetText())
-		for _, id := range decl.IdentifierList().AllIDENTIFIER() {
-			v.Symbols.Insert(id.GetText(), tipo)
-		}
+		decl.Accept(v)
 	}
 	return nil
 }
@@ -149,72 +223,63 @@ func (v *TypeVisitor) VisitAssignmentStatement(ctx *parser.AssignmentStatementCo
 		left := ctx.Expression(0).Accept(v)
 		right := ctx.Expression(1).Accept(v)
 		if left != nil && right != nil {
-			leftType := left.(int)
-			rightType := right.(int)
-			if leftType != rightType {
+			lt := left.(Type)
+			rt := right.(Type)
+			if !lt.Equals(rt) {
 				v.reportError("Incompatibilidad de tipos en asignacion", 
-					fmt.Sprintf("tipos %d y %d no coinciden", leftType, rightType), ctx)
+					fmt.Sprintf("tipos %s y %s no coinciden", lt.String(), rt.String()), ctx)
 			}
 		}
 	}
 	return nil
 }
 
-func (v *TypeVisitor) VisitPrimaryExpr(ctx *parser.PrimaryExprContext) interface{} {
-	return ctx.PrimaryExpression().Accept(v)
-}
-
 func (v *TypeVisitor) VisitAddExpr(ctx *parser.AddExprContext) interface{} {
 	r1 := ctx.Expression(0).Accept(v)
 	r2 := ctx.Expression(1).Accept(v)
+	var t Type = T_UNKNOWN
+	if r1 != nil && r2 != nil {
+		t1 := r1.(Type)
+		t2 := r2.(Type)
+		if t1.Equals(T_INT) && t2.Equals(T_INT) {
+			t = T_INT
+		} else if t1.Equals(T_STRING) && t2.Equals(T_STRING) && ctx.GetOp().GetText() == "+" {
+			t = T_STRING
+		} else {
+			v.reportError("Operacion aritmetica invalida", 
+				fmt.Sprintf("no se puede operar entre tipos %s y %s", t1.String(), t2.String()), ctx)
+		}
+	}
+	v.NodeTypes[ctx] = t
+	return t
+}
+
+func (v *TypeVisitor) VisitMulExpr(ctx *parser.MulExprContext) interface{} {
+	r1 := ctx.Expression(0).Accept(v)
+	r2 := ctx.Expression(1).Accept(v)
 	if r1 == nil || r2 == nil { return T_UNKNOWN }
-	
-	t1 := r1.(int)
-	t2 := r2.(int)
-	
-	if t1 == T_INT && t2 == T_INT {
+	t1 := r1.(Type)
+	t2 := r2.(Type)
+	if t1.Equals(T_INT) && t2.Equals(T_INT) {
 		return T_INT
 	}
-	if t1 == T_STRING && t2 == T_STRING && ctx.GetOp().GetText() == "+" {
-		return T_STRING
-	}
-	
-	v.reportError("Operacion aritmetica invalida", 
-		fmt.Sprintf("no se puede operar entre tipos %d y %d", t1, t2), ctx)
+	v.reportError("Operacion invalida", "multiplicacion requiere enteros", ctx)
 	return T_UNKNOWN
 }
 
-func (v *TypeVisitor) VisitPrimaryExpression(ctx *parser.PrimaryExpressionContext) interface{} {
-	if ctx.Operand() != nil {
-		return ctx.Operand().Accept(v)
+func (v *TypeVisitor) VisitUnaryExpr(ctx *parser.UnaryExprContext) interface{} {
+	res := ctx.Expression().Accept(v)
+	if res == nil { return T_UNKNOWN }
+	t := res.(Type)
+	op := ctx.GetChild(0).(antlr.TerminalNode).GetText()
+	if op == "!" {
+		if t.Equals(T_BOOL) { return T_BOOL }
+		v.reportError("Operacion unaria invalida", "! requiere booleano", ctx)
 	}
-	return T_UNKNOWN
-}
-
-func (v *TypeVisitor) VisitOperand(ctx *parser.OperandContext) interface{} {
-	if ctx.Literal() != nil {
-		return ctx.Literal().Accept(v)
+	if op == "+" || op == "-" {
+		if t.Equals(T_INT) { return T_INT }
+		v.reportError("Operacion unaria invalida", op + " requiere entero", ctx)
 	}
-	if ctx.IDENTIFIER() != nil {
-		name := ctx.IDENTIFIER().GetText()
-		ident, found := v.Symbols.Lookup(name)
-		if !found {
-			return T_UNKNOWN
-		}
-		return ident.Tipo
-	}
-	if ctx.Expression() != nil {
-		return ctx.Expression().Accept(v)
-	}
-	return T_UNKNOWN
-}
-
-func (v *TypeVisitor) VisitLiteral(ctx *parser.LiteralContext) interface{} {
-	if ctx.INTLITERAL() != nil { return T_INT }
-	if ctx.FLOATLITERAL() != nil { return T_INT } 
-	if ctx.RUNELITERAL() != nil { return T_CHAR }
-	if ctx.RAWSTRINGLITERAL() != nil { return T_STRING }
-	if ctx.INTERPRETEDSTRINGLITERAL() != nil { return T_STRING }
 	return T_UNKNOWN
 }
 
@@ -222,68 +287,107 @@ func (v *TypeVisitor) VisitRelExpr(ctx *parser.RelExprContext) interface{} {
 	r1 := ctx.Expression(0).Accept(v)
 	r2 := ctx.Expression(1).Accept(v)
 	if r1 != nil && r2 != nil {
-		t1 := r1.(int)
-		t2 := r2.(int)
-		if t1 != t2 {
+		t1 := r1.(Type)
+		t2 := r2.(Type)
+		if !t1.Equals(t2) {
 			v.reportError("Comparacion invalida", 
-				fmt.Sprintf("tipos %d y %d no son comparables", t1, t2), ctx)
+				fmt.Sprintf("tipos %s y %s no son comparables", t1.String(), t2.String()), ctx)
 		}
 	}
 	return T_BOOL
 }
 
 func (v *TypeVisitor) VisitIfStatement(ctx *parser.IfStatementContext) interface{} {
-	if ctx.SimpleStatement() != nil {
-		ctx.SimpleStatement().Accept(v)
-	}
-	
+	if ctx.SimpleStatement() != nil { v.visitIsolated(ctx.SimpleStatement()) }
 	if ctx.Expression() != nil {
 		res := ctx.Expression().Accept(v)
-		if res != nil {
-			condType := res.(int)
-			if condType != T_BOOL {
-				v.reportError("Condicion no booleana", 
-					fmt.Sprintf("el if requiere bool, se encontro %d", condType), ctx)
-			}
+		if res != nil && !res.(Type).Equals(T_BOOL) {
+			v.reportError("Condicion no booleana", "if requiere bool", ctx)
 		}
 	}
-	
-	// Visit the main block
-	if ctx.Block(0) != nil {
-		ctx.Block(0).Accept(v)
-	}
-	
-	// Visit the 'else' block if present
-	if len(ctx.AllBlock()) > 1 {
-		ctx.Block(1).Accept(v)
-	}
-	
-	// Visit the 'else if' statement if present
-	if ctx.IfStatement() != nil {
-		ctx.IfStatement().Accept(v)
-	}
-	
+	for _, b := range ctx.AllBlock() { v.visitIsolated(b) }
+	if ctx.IfStatement() != nil { v.visitIsolated(ctx.IfStatement()) }
 	return nil
 }
 
+func (v *TypeVisitor) VisitOperand(ctx *parser.OperandContext) interface{} {
+	var t Type = T_UNKNOWN
+	if ctx.Literal() != nil {
+		t = ctx.Literal().Accept(v).(Type)
+	} else if ctx.IDENTIFIER() != nil {
+		name := ctx.IDENTIFIER().GetText()
+		ident, found := v.Symbols.Lookup(name)
+		if found {
+			t = ident.Tipo
+			v.SymbolMap[ctx.IDENTIFIER()] = ident
+		}
+	} else if ctx.Expression() != nil {
+		t = ctx.Expression().Accept(v).(Type)
+	}
+	v.NodeTypes[ctx] = t
+	return t
+}
+
+func (v *TypeVisitor) VisitLiteral(ctx *parser.LiteralContext) interface{} {
+	var t Type = T_UNKNOWN
+	if ctx.INTLITERAL() != nil { t = T_INT }
+	if ctx.FLOATLITERAL() != nil { t = T_INT } 
+	if ctx.RUNELITERAL() != nil { t = T_CHAR }
+	if ctx.RAWSTRINGLITERAL() != nil { t = T_STRING }
+	if ctx.INTERPRETEDSTRINGLITERAL() != nil { t = T_STRING }
+	v.NodeTypes[ctx] = t
+	return t
+}
+
+func (v *TypeVisitor) VisitPrimaryExpr(ctx *parser.PrimaryExprContext) interface{} {
+	return ctx.PrimaryExpression().Accept(v)
+}
+
+func (v *TypeVisitor) VisitPrimaryExpression(ctx *parser.PrimaryExpressionContext) interface{} {
+	if ctx.Operand() != nil { return ctx.Operand().Accept(v) }
+	
+	var t Type = T_UNKNOWN
+	if ctx.PrimaryExpression() != nil {
+		res := ctx.PrimaryExpression().Accept(v)
+		if res != nil { t = res.(Type) }
+	}
+	
+	if ctx.Arguments() != nil {
+		ctx.Arguments().Accept(v)
+	}
+	if ctx.Index() != nil { ctx.Index().Accept(v) }
+	if ctx.Selector() != nil { ctx.Selector().Accept(v) }
+	
+	v.NodeTypes[ctx] = t
+	return t
+}
+
 func (v *TypeVisitor) VisitStatement(ctx *parser.StatementContext) interface{} {
-	if ctx.GetChildCount() > 0 {
-		return ctx.GetChild(0).(antlr.ParseTree).Accept(v)
+	if terminal, ok := ctx.GetChild(0).(antlr.TerminalNode); ok {
+		text := terminal.GetText()
+		if text == "print" || text == "println" || text == "return" {
+			if ctx.ExpressionList() != nil {
+				ctx.ExpressionList().Accept(v)
+			}
+			if ctx.Expression() != nil {
+				ctx.Expression().Accept(v)
+			}
+			return nil
+		}
+	}
+	for _, child := range ctx.GetChildren() {
+		if node, ok := child.(antlr.ParseTree); ok {
+			node.Accept(v)
+		}
 	}
 	return nil
 }
 
 func (v *TypeVisitor) VisitBlock(ctx *parser.BlockContext) interface{} {
-	_, isFunc := ctx.GetParent().(*parser.FuncDeclContext)
-	if !isFunc {
-		v.Symbols.OpenScope()
-		defer v.Symbols.CloseScope()
-	}
-	
+	v.Symbols.OpenScope()
+	defer v.Symbols.CloseScope()
 	if ctx.StatementList() != nil {
-		for _, stmt := range ctx.StatementList().AllStatement() {
-			v.visitIsolated(stmt)
-		}
+		ctx.StatementList().Accept(v)
 	}
 	return nil
 }

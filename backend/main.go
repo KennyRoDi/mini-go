@@ -44,18 +44,7 @@ func main() {
 		parserErrors.PrintErrors()
 	}
 
-	// Fase de Alcances (Scope Checking)
-	scopeVisitor := NewScopeVisitor()
-	tree.Accept(scopeVisitor)
-
-	if len(scopeVisitor.Errors) > 0 {
-		for _, err := range scopeVisitor.Errors {
-			fmt.Println(err)
-		}
-	}
-
-	// Fase de Tipos (Type Checking)
-	// Reset symbol table for the new pass
+	// Fase de Tipos (Semantic Analysis)
 	symbols := NewTablaSimbolos()
 	typeVisitor := NewTypeVisitor(symbols)
 	tree.Accept(typeVisitor)
@@ -64,10 +53,13 @@ func main() {
 		for _, err := range typeVisitor.Errors {
 			fmt.Println(err)
 		}
+		os.Exit(1)
 	}
 
 	// Fase de Generacion de Codigo (LLVM IR)
 	encoder := NewMiniGoEncoder(symbols)
+	encoder.NodeTypes = typeVisitor.NodeTypes
+	encoder.SymbolMap = typeVisitor.SymbolMap
 	tree.Accept(encoder)
 
 	outPath := "output"
