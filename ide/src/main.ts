@@ -33,7 +33,19 @@ function createWindow() {
         { role: 'quit' }
       ]
     },
-    { role: 'editMenu' },
+    {
+      label: 'Edit',
+      submenu: [
+        { label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: () => win?.webContents.send('menu-undo') },
+        { label: 'Redo', accelerator: 'CmdOrCtrl+Y', click: () => win?.webContents.send('menu-redo') },
+        { type: 'separator' },
+        { label: 'Cut', accelerator: 'CmdOrCtrl+X', role: 'cut' },
+        { label: 'Copy', accelerator: 'CmdOrCtrl+C', role: 'copy' },
+        { label: 'Paste', accelerator: 'CmdOrCtrl+V', role: 'paste' },
+        { type: 'separator' },
+        { label: 'Select All', accelerator: 'CmdOrCtrl+A', click: () => win?.webContents.send('menu-select-all') }
+      ]
+    },
     { role: 'viewMenu' },
     { role: 'windowMenu' }
   ]

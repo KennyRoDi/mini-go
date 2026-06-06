@@ -113,22 +113,34 @@ const App: React.FC = () => {
     const onOpen = () => handleOpenFile();
     const onSave = () => handleSaveFile();
     const onRun = () => handleRun();
+    const onUndo = () => editorRef.current?.trigger('keyboard', 'undo', null);
+    const onRedo = () => editorRef.current?.trigger('keyboard', 'redo', null);
+    const onSelectAll = () => editorRef.current?.trigger('keyboard', 'editor.action.selectAll', null);
 
     window.ipcRenderer.removeAllListeners('menu-new-file');
     window.ipcRenderer.removeAllListeners('menu-open-file');
     window.ipcRenderer.removeAllListeners('menu-save-file');
     window.ipcRenderer.removeAllListeners('menu-run');
+    window.ipcRenderer.removeAllListeners('menu-undo');
+    window.ipcRenderer.removeAllListeners('menu-redo');
+    window.ipcRenderer.removeAllListeners('menu-select-all');
 
     window.ipcRenderer.on('menu-new-file', onNew);
     window.ipcRenderer.on('menu-open-file', onOpen);
     window.ipcRenderer.on('menu-save-file', onSave);
     window.ipcRenderer.on('menu-run', onRun);
+    window.ipcRenderer.on('menu-undo', onUndo);
+    window.ipcRenderer.on('menu-redo', onRedo);
+    window.ipcRenderer.on('menu-select-all', onSelectAll);
 
     return () => {
       window.ipcRenderer.off('menu-new-file', onNew);
       window.ipcRenderer.off('menu-open-file', onOpen);
       window.ipcRenderer.off('menu-save-file', onSave);
       window.ipcRenderer.off('menu-run', onRun);
+      window.ipcRenderer.off('menu-undo', onUndo);
+      window.ipcRenderer.off('menu-redo', onRedo);
+      window.ipcRenderer.off('menu-select-all', onSelectAll);
     };
   }, [handleNewFile, handleOpenFile, handleSaveFile, handleRun]);
 
