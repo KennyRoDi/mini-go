@@ -248,7 +248,7 @@ func (v *TypeVisitor) VisitAssignmentStatement(ctx *parser.AssignmentStatementCo
 func (v *TypeVisitor) VisitAddExpr(ctx *parser.AddExprContext) interface{} {
 	r1 := ctx.Expression(0).Accept(v)
 	r2 := ctx.Expression(1).Accept(v)
-	var t Type = T_UNKNOWN
+	var t Type = T_INT // Recuperación semántica: asumimos int por defecto para operaciones aritméticas
 	if r1 != nil && r2 != nil {
 		t1 := r1.(Type)
 		t2 := r2.(Type)
@@ -257,12 +257,15 @@ func (v *TypeVisitor) VisitAddExpr(ctx *parser.AddExprContext) interface{} {
 		} else if t1.Equals(T_STRING) && t2.Equals(T_STRING) && ctx.GetOp().GetText() == "+" {
 			t = T_STRING
 		} else {
-			v.reportError("Operacion aritmetica invalida", 
-				fmt.Sprintf("no se puede operar entre tipos %s y %s", t1.String(), t2.String()), ctx)
+			// Si uno de los tipos es UNKNOWN, no reportamos error adicional para evitar cascada, 
+			// pero si ambos son conocidos e incompatibles, reportamos.
+			if !t1.Equals(T_UNKNOWN) && !t2.Equals(T_UNKNOWN) {
+				v.reportError("Operacion aritmetica invalida",
+					fmt.Sprintf("no se puede operar entre tipos %s y %s", t1.String(), t2.String()), ctx)
+			}
 		}
 	}
 	v.NodeTypes[ctx] = t
-	// Also map the expression base
 	v.NodeTypes[ctx.GetRuleContext()] = t
 	return t
 }
@@ -270,7 +273,7 @@ func (v *TypeVisitor) VisitAddExpr(ctx *parser.AddExprContext) interface{} {
 func (v *TypeVisitor) VisitMulExpr(ctx *parser.MulExprContext) interface{} {
 	r1 := ctx.Expression(0).Accept(v)
 	r2 := ctx.Expression(1).Accept(v)
-	var t Type = T_UNKNOWN
+	var t Type = T_INT // Recuperación semántica: asumimos int por defecto
 	if r1 != nil && r2 != nil {
 		t1 := r1.(Type)
 		t2 := r2.(Type)
@@ -278,7 +281,9 @@ func (v *TypeVisitor) VisitMulExpr(ctx *parser.MulExprContext) interface{} {
 			t = T_INT
 		} else {
 			op := ctx.GetOp().GetText()
-			v.reportError("Operacion invalida", fmt.Sprintf("'%s' requiere enteros, se encontro %s y %s", op, t1.String(), t2.String()), ctx)
+			if !t1.Equals(T_UNKNOWN) && !t2.Equals(T_UNKNOWN) {
+				v.reportError("Operacion invalida", fmt.Sprintf("'%s' requiere enteros, se encontro %s y %s", op, t1.String(), t2.String()), ctx)
+			}
 		}
 	}
 	v.NodeTypes[ctx] = t
