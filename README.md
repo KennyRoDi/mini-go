@@ -20,8 +20,9 @@
 *   **Code Gen:** Produces **LLVM IR**, which is then linked via **Clang** to create native executables.
 
 ### 2. Desktop IDE
-*   **Stack:** Electron, TypeScript, HTML5/CSS3.
+*   **Stack:** Electron, React, TypeScript, HeroUI, Tailwind CSS.
 *   **Icons:** Lucide React icons for a professional look.
+*   **Editor:** Monaco Editor (el motor de VS Code) via `@monaco-editor/react`.
 *   **IPC:** Spawns the Go compiler as a child process and parses real-time diagnostics.
 
 ## Onboarding & Requirements
@@ -29,7 +30,7 @@
 To run this project, you need the following tools installed:
 
 1.  **Go (Golang):** Version 1.20+
-2.  **Node.js & npm:** For the Electron frontend.
+2.  **Node.js & pnpm:** For the modern React frontend.
 3.  **Clang:** Required by the backend to link LLVM IR into executables.
 4.  **Java (JRE):** Only if you need to regenerate the ANTLR4 parser from the `.g4` file.
 
@@ -47,8 +48,8 @@ go build -o minigo .
 Navigate to the ide directory, install dependencies, and start the application:
 ```bash
 cd ../ide
-npm install
-npm run start
+pnpm install
+pnpm start
 ```
 
 ## Mini-GO Language Features
@@ -60,7 +61,7 @@ The current version supports:
 *   **Main Entry:** Automatic synthesis of `func main()` for global statements.
 
 ## Future Improvements
-*   **Monaco Editor:** Integration for real syntax highlighting and error squiggles.
 *   **Full Struct Support:** Implementation of struct methods and attribute access.
 *   **Array & Slices:** Expansion of the type checker to handle complex collections.
 *   **Interactive Terminal:** Integration of `xterm.js` for a true console experience.
+*   **Project Workspace:** Support for multi-file projects and folders.

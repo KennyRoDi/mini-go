@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-editor: #1e1e1e;
+  --cyan-run: #5fb3b3;
+}
+
+html, body, #root {
+  height: 100%;
+}
