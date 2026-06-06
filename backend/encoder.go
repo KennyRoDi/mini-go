@@ -57,10 +57,19 @@ func (v *MiniGoEncoder) getLLVMType(t Type) types.Type {
 	if t.Equals(T_CHAR) { return types.I8 }
 	if t.Equals(T_STRING) { return types.NewPointer(types.I8) }
 	if t.Equals(T_VOID) { return types.Void }
-	if _, ok := t.(ArrayType); ok {
-		at := t.(ArrayType)
+	
+	if at, ok := t.(ArrayType); ok {
 		return types.NewArray(uint64(at.Size), v.getLLVMType(at.Elem))
 	}
+	
+	if st, ok := t.(StructType); ok {
+		var fields []types.Type
+		for _, name := range st.OrderedFields {
+			fields = append(fields, v.getLLVMType(st.Fields[name]))
+		}
+		return types.NewStruct(fields...)
+	}
+	
 	return types.I32
 }
 
@@ -223,30 +232,80 @@ func (v *MiniGoEncoder) VisitFuncDecl(ctx *parser.FuncDeclContext) interface{} {
 	return nil
 }
 
-func (v *MiniGoEncoder) getIdent(node antlr.ParseTree) *Ident {
-	if node == nil { return nil }
-	if term, ok := node.(antlr.TerminalNode); ok {
+func (v *MiniGoEncoder) getPointer(ctx antlr.ParseTree) value.Value {
+	if ctx == nil { return nil }
+
+	if op, ok := ctx.(*parser.OperandContext); ok && op.IDENTIFIER() != nil {
+		term := op.IDENTIFIER()
 		if ident, ok := v.SymbolMap[term]; ok {
-			return ident
+			return v.symbolPointers[ident]
 		}
 	}
-	for i := 0; i < node.GetChildCount(); i++ {
-		if child, ok := node.GetChild(i).(antlr.ParseTree); ok {
-			if res := v.getIdent(child); res != nil {
-				return res
+
+	if pe, ok := ctx.(*parser.PrimaryExpressionContext); ok {
+		if pe.Operand() != nil {
+			return v.getPointer(pe.Operand())
+		}
+		
+		if pe.PrimaryExpression() != nil {
+			basePtr := v.getPointer(pe.PrimaryExpression())
+			if basePtr == nil { return nil }
+			
+			baseType := basePtr.Type().(*types.PointerType).ElemType
+
+			if pe.Index() != nil {
+				idxVal := pe.Index().(*parser.IndexContext).Expression().Accept(v).(value.Value)
+				zero := constant.NewInt(types.I32, 0)
+				return v.currBlock.NewGetElementPtr(baseType, basePtr, zero, idxVal)
+			}
+			
+			if pe.Selector() != nil {
+				fieldName := pe.Selector().(*parser.SelectorContext).IDENTIFIER().GetText()
+				t := v.NodeTypes[pe.PrimaryExpression()]
+				if st, ok := t.(StructType); ok {
+					fieldIdx := -1
+					for i, name := range st.OrderedFields {
+						if name == fieldName { fieldIdx = i; break }
+					}
+					if fieldIdx != -1 {
+						zero := constant.NewInt(types.I32, 0)
+						targetIdx := constant.NewInt(types.I32, int64(fieldIdx))
+						return v.currBlock.NewGetElementPtr(baseType, basePtr, zero, targetIdx)
+					}
+				}
 			}
 		}
+	}
+
+	if expr, ok := ctx.(*parser.PrimaryExprContext); ok {
+		return v.getPointer(expr.PrimaryExpression())
 	}
 	return nil
 }
 
 func (v *MiniGoEncoder) VisitAssignmentStatement(ctx *parser.AssignmentStatementContext) interface{} {
 	if ctx.GetOp() != nil {
-		ident := v.getIdent(ctx.Expression(0))
-		if ident != nil {
-			if ptr, ok := v.symbolPointers[ident]; ok {
-				val := ctx.Expression(1).Accept(v).(value.Value)
-				v.currBlock.NewStore(val, ptr)
+		op := ctx.GetOp().GetText()
+		ptr := v.getPointer(ctx.Expression(0))
+		if ptr == nil { return nil }
+		
+		val := ctx.Expression(1).Accept(v).(value.Value)
+		
+		if op == "=" {
+			v.currBlock.NewStore(val, ptr)
+		} else {
+			oldVal := v.currBlock.NewLoad(ptr.Type().(*types.PointerType).ElemType, ptr)
+			var newVal value.Value
+			switch op {
+			case "+=": newVal = v.currBlock.NewAdd(oldVal, val)
+			case "-=": newVal = v.currBlock.NewSub(oldVal, val)
+			case "*=": newVal = v.currBlock.NewMul(oldVal, val)
+			case "/=": newVal = v.currBlock.NewSDiv(oldVal, val)
+			case "<<=": newVal = v.currBlock.NewShl(oldVal, val)
+			case ">>=": newVal = v.currBlock.NewAShr(oldVal, val)
+			}
+			if newVal != nil {
+				v.currBlock.NewStore(newVal, ptr)
 			}
 		}
 	}
@@ -278,6 +337,109 @@ func (v *MiniGoEncoder) VisitIfStatement(ctx *parser.IfStatementContext) interfa
 	
 	v.currBlock = mergeBlock
 	return nil
+}
+
+func (v *MiniGoEncoder) VisitLoop(ctx *parser.LoopContext) interface{} {
+	if ctx.SimpleStatement(0) != nil {
+		ctx.SimpleStatement(0).Accept(v)
+	}
+	
+	condBlock := v.currFunc.NewBlock("loop.cond")
+	bodyBlock := v.currFunc.NewBlock("loop.body")
+	postBlock := v.currFunc.NewBlock("loop.post")
+	exitBlock := v.currFunc.NewBlock("loop.exit")
+	
+	v.currBlock.NewBr(condBlock)
+	v.currBlock = condBlock
+	
+	var cond value.Value = constant.NewInt(types.I1, 1)
+	if ctx.Expression() != nil {
+		cond = ctx.Expression().Accept(v).(value.Value)
+	}
+	v.currBlock.NewCondBr(cond, bodyBlock, exitBlock)
+	
+	v.currBlock = bodyBlock
+	if ctx.Block() != nil {
+		ctx.Block().Accept(v)
+	}
+	if v.currBlock.Term == nil { v.currBlock.NewBr(postBlock) }
+	
+	v.currBlock = postBlock
+	if len(ctx.AllSimpleStatement()) > 1 {
+		ctx.SimpleStatement(1).Accept(v)
+	}
+	v.currBlock.NewBr(condBlock)
+	
+	v.currBlock = exitBlock
+	return nil
+}
+
+func (v *MiniGoEncoder) VisitSwitch_stmt(ctx *parser.Switch_stmtContext) interface{} {
+	if ctx.SimpleStatement() != nil { ctx.SimpleStatement().Accept(v) }
+	
+	switchVal := ctx.Expression().Accept(v).(value.Value)
+	exitBlock := v.currFunc.NewBlock("switch.exit")
+	
+	clauses := ctx.ExpressionCaseClauseList().(*parser.ExpressionCaseClauseListContext).AllExpressionCaseClause()
+	var defaultClause *parser.ExpressionCaseClauseContext
+	
+	for _, clause := range clauses {
+		caseCtx := clause.(*parser.ExpressionCaseClauseContext)
+		esc := caseCtx.ExpressionSwitchCase().(*parser.ExpressionSwitchCaseContext)
+		if esc.GetText() == "default" {
+			defaultClause = caseCtx
+			continue
+		}
+		
+		for _, expr := range esc.ExpressionList().(*parser.ExpressionListContext).AllExpression() {
+			caseVal := expr.Accept(v).(value.Value)
+			isMatch := v.currBlock.NewICmp(enum.IPredEQ, switchVal, caseVal)
+			matchBlock := v.currFunc.NewBlock("switch.match")
+			nextCaseBlock := v.currFunc.NewBlock("switch.next")
+			v.currBlock.NewCondBr(isMatch, matchBlock, nextCaseBlock)
+			v.currBlock = matchBlock
+			if caseCtx.StatementList() != nil {
+				caseCtx.StatementList().Accept(v)
+			}
+			if v.currBlock.Term == nil { v.currBlock.NewBr(exitBlock) }
+			v.currBlock = nextCaseBlock
+		}
+	}
+	if defaultClause != nil {
+		if defaultClause.StatementList() != nil {
+			defaultClause.StatementList().Accept(v)
+		}
+	}
+	if v.currBlock.Term == nil { v.currBlock.NewBr(exitBlock) }
+	v.currBlock = exitBlock
+	return nil
+}
+
+func (v *MiniGoEncoder) VisitSimpleStatement(ctx *parser.SimpleStatementContext) interface{} {
+	if ctx.Expression() != nil {
+		// Handle i++ / i-- (postfix operators in grammar are part of simpleStatement)
+		// We need to check if there is an operator after the expression
+		if ctx.GetChildCount() > 1 {
+			if opNode, ok := ctx.GetChild(1).(antlr.TerminalNode); ok {
+				op := opNode.GetText()
+				if op == "++" || op == "--" {
+					ptr := v.getPointer(ctx.Expression())
+					if ptr != nil {
+						val := v.currBlock.NewLoad(ptr.Type().(*types.PointerType).ElemType, ptr)
+						var newVal value.Value
+						if op == "++" {
+							newVal = v.currBlock.NewAdd(val, constant.NewInt(types.I32, 1))
+						} else {
+							newVal = v.currBlock.NewSub(val, constant.NewInt(types.I32, 1))
+						}
+						v.currBlock.NewStore(newVal, ptr)
+					}
+					return nil
+				}
+			}
+		}
+	}
+	return v.VisitChildren(ctx)
 }
 
 func (v *MiniGoEncoder) VisitStatement(ctx *parser.StatementContext) interface{} {
@@ -333,23 +495,32 @@ func (v *MiniGoEncoder) VisitPrimaryExpression(ctx *parser.PrimaryExpressionCont
 	if ctx.Operand() != nil {
 		return ctx.Operand().Accept(v)
 	}
-	if ctx.Arguments() != nil {
-		ident := v.getIdent(ctx.PrimaryExpression())
-		var target *ir.Func
-		if ident != nil {
+	
+	if ctx.PrimaryExpression() != nil {
+		if ctx.Arguments() != nil {
+			funcName := ctx.PrimaryExpression().GetText()
+			var target *ir.Func
 			for _, f := range v.Module.Funcs {
-				if f.Name() == ident.Nombre { target = f; break }
+				if f.Name() == funcName { target = f; break }
+			}
+			if target != nil {
+				var args []value.Value
+				argCtx := ctx.Arguments().(*parser.ArgumentsContext)
+				if argCtx.ExpressionList() != nil {
+					for _, expr := range argCtx.ExpressionList().(*parser.ExpressionListContext).AllExpression() {
+						args = append(args, expr.Accept(v).(value.Value))
+					}
+				}
+				return v.currBlock.NewCall(target, args...)
 			}
 		}
-		if target != nil {
-			var args []value.Value
-			argCtx := ctx.Arguments().(*parser.ArgumentsContext)
-			if argCtx.ExpressionList() != nil {
-				for _, expr := range argCtx.ExpressionList().(*parser.ExpressionListContext).AllExpression() {
-					args = append(args, expr.Accept(v).(value.Value))
-				}
-			}
-			return v.currBlock.NewCall(target, args...)
+		
+		ptr := v.getPointer(ctx)
+		if ptr != nil {
+			fmt.Printf("DEBUG ENCODER: Loading %s from pointer type %s\n", ctx.GetText(), ptr.Type().String())
+			return v.currBlock.NewLoad(ptr.Type().(*types.PointerType).ElemType, ptr)
+		} else {
+			fmt.Printf("DEBUG ENCODER: Pointer for %s IS NIL\n", ctx.GetText())
 		}
 	}
 	return nil
@@ -366,11 +537,13 @@ func (v *MiniGoEncoder) VisitUnaryExpr(ctx *parser.UnaryExprContext) interface{}
 func (v *MiniGoEncoder) VisitMulExpr(ctx *parser.MulExprContext) interface{} {
 	l := ctx.Expression(0).Accept(v).(value.Value)
 	r := ctx.Expression(1).Accept(v).(value.Value)
-	op := ctx.GetChild(1).(antlr.TerminalNode).GetText()
+	op := ctx.GetOp().GetText()
 	switch op {
 	case "*": return v.currBlock.NewMul(l, r)
 	case "/": return v.currBlock.NewSDiv(l, r)
 	case "%": return v.currBlock.NewSRem(l, r)
+	case "<<": return v.currBlock.NewShl(l, r)
+	case ">>": return v.currBlock.NewAShr(l, r)
 	}
 	return nil
 }
@@ -395,19 +568,42 @@ func (v *MiniGoEncoder) VisitLiteral(ctx *parser.LiteralContext) interface{} {
 		fmt.Sscanf(ctx.INTLITERAL().GetText(), "%d", &val)
 		return constant.NewInt(types.I32, val)
 	}
+	if ctx.INTERPRETEDSTRINGLITERAL() != nil {
+		text := ctx.INTERPRETEDSTRINGLITERAL().GetText()
+		text = text[1 : len(text)-1]
+		strConst := constant.NewCharArrayFromString(text + "\x00")
+		strGlobal := v.Module.NewGlobalDef(fmt.Sprintf("str.%d", len(v.Module.Globals)), strConst)
+		zero := constant.NewInt(types.I32, 0)
+		return constant.NewGetElementPtr(strConst.Typ, strGlobal, zero, zero)
+	}
+	if ctx.RAWSTRINGLITERAL() != nil {
+		text := ctx.RAWSTRINGLITERAL().GetText()
+		text = text[1 : len(text)-1]
+		strConst := constant.NewCharArrayFromString(text + "\x00")
+		strGlobal := v.Module.NewGlobalDef(fmt.Sprintf("str.%d", len(v.Module.Globals)), strConst)
+		zero := constant.NewInt(types.I32, 0)
+		return constant.NewGetElementPtr(strConst.Typ, strGlobal, zero, zero)
+	}
 	return constant.NewInt(types.I32, 0)
 }
 
 func (v *MiniGoEncoder) VisitAddExpr(ctx *parser.AddExprContext) interface{} {
 	l := ctx.Expression(0).Accept(v).(value.Value)
 	r := ctx.Expression(1).Accept(v).(value.Value)
-	return v.currBlock.NewAdd(l, r)
+	op := ctx.GetOp().GetText()
+	switch op {
+	case "+": return v.currBlock.NewAdd(l, r)
+	case "-": return v.currBlock.NewSub(l, r)
+	case "|": return v.currBlock.NewOr(l, r)
+	case "^": return v.currBlock.NewXor(l, r)
+	}
+	return nil
 }
 
 func (v *MiniGoEncoder) VisitRelExpr(ctx *parser.RelExprContext) interface{} {
 	l := ctx.Expression(0).Accept(v).(value.Value)
 	r := ctx.Expression(1).Accept(v).(value.Value)
-	op := ctx.GetChild(1).(antlr.TerminalNode).GetText()
+	op := ctx.GetOp().GetText()
 	var pred enum.IPred
 	switch op {
 	case "==": pred = enum.IPredEQ
