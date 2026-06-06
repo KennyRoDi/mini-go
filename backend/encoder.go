@@ -380,7 +380,12 @@ func (v *MiniGoEncoder) VisitLoop(ctx *parser.LoopContext) interface{} {
 func (v *MiniGoEncoder) VisitSwitch_stmt(ctx *parser.Switch_stmtContext) interface{} {
 	if ctx.SimpleStatement() != nil { ctx.SimpleStatement().Accept(v) }
 	
-	switchVal := ctx.Expression().Accept(v).(value.Value)
+	res := ctx.Expression().Accept(v)
+	if res == nil {
+		return nil
+	}
+	switchVal := res.(value.Value)
+	
 	exitBlock := v.currFunc.NewBlock("switch.exit")
 	
 	clauses := ctx.ExpressionCaseClauseList().(*parser.ExpressionCaseClauseListContext).AllExpressionCaseClause()
@@ -394,18 +399,22 @@ func (v *MiniGoEncoder) VisitSwitch_stmt(ctx *parser.Switch_stmtContext) interfa
 			continue
 		}
 		
-		for _, expr := range esc.ExpressionList().(*parser.ExpressionListContext).AllExpression() {
-			caseVal := expr.Accept(v).(value.Value)
-			isMatch := v.currBlock.NewICmp(enum.IPredEQ, switchVal, caseVal)
-			matchBlock := v.currFunc.NewBlock("switch.match")
-			nextCaseBlock := v.currFunc.NewBlock("switch.next")
-			v.currBlock.NewCondBr(isMatch, matchBlock, nextCaseBlock)
-			v.currBlock = matchBlock
-			if caseCtx.StatementList() != nil {
-				caseCtx.StatementList().Accept(v)
+		if esc.ExpressionList() != nil {
+			for _, expr := range esc.ExpressionList().(*parser.ExpressionListContext).AllExpression() {
+				cRes := expr.Accept(v)
+				if cRes == nil { continue }
+				caseVal := cRes.(value.Value)
+				isMatch := v.currBlock.NewICmp(enum.IPredEQ, switchVal, caseVal)
+				matchBlock := v.currFunc.NewBlock("switch.match")
+				nextCaseBlock := v.currFunc.NewBlock("switch.next")
+				v.currBlock.NewCondBr(isMatch, matchBlock, nextCaseBlock)
+				v.currBlock = matchBlock
+				if caseCtx.StatementList() != nil {
+					caseCtx.StatementList().Accept(v)
+				}
+				if v.currBlock.Term == nil { v.currBlock.NewBr(exitBlock) }
+				v.currBlock = nextCaseBlock
 			}
-			if v.currBlock.Term == nil { v.currBlock.NewBr(exitBlock) }
-			v.currBlock = nextCaseBlock
 		}
 	}
 	if defaultClause != nil {
