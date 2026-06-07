@@ -547,10 +547,14 @@ func (v *MiniGoEncoder) VisitUnaryExpr(ctx *parser.UnaryExprContext) interface{}
 	if op == "!" { return v.currBlock.NewXor(val, constant.NewInt(types.I1, 1)) }
 	return val
 }
-
 func (v *MiniGoEncoder) VisitMulExpr(ctx *parser.MulExprContext) interface{} {
-	l := ctx.Expression(0).Accept(v).(value.Value)
-	r := ctx.Expression(1).Accept(v).(value.Value)
+	lRes := ctx.Expression(0).Accept(v)
+	rRes := ctx.Expression(1).Accept(v)
+	if lRes == nil || rRes == nil {
+		return nil
+	}
+	l := lRes.(value.Value)
+	r := rRes.(value.Value)
 	op := ctx.GetOp().GetText()
 	switch op {
 	case "*": return v.currBlock.NewMul(l, r)
@@ -558,6 +562,7 @@ func (v *MiniGoEncoder) VisitMulExpr(ctx *parser.MulExprContext) interface{} {
 	case "%": return v.currBlock.NewSRem(l, r)
 	case "<<": return v.currBlock.NewShl(l, r)
 	case ">>": return v.currBlock.NewAShr(l, r)
+	case "&": return v.currBlock.NewAnd(l, r)
 	}
 	return nil
 }
@@ -602,8 +607,13 @@ func (v *MiniGoEncoder) VisitLiteral(ctx *parser.LiteralContext) interface{} {
 }
 
 func (v *MiniGoEncoder) VisitAddExpr(ctx *parser.AddExprContext) interface{} {
-	l := ctx.Expression(0).Accept(v).(value.Value)
-	r := ctx.Expression(1).Accept(v).(value.Value)
+	lRes := ctx.Expression(0).Accept(v)
+	rRes := ctx.Expression(1).Accept(v)
+	if lRes == nil || rRes == nil {
+		return nil
+	}
+	l := lRes.(value.Value)
+	r := rRes.(value.Value)
 	op := ctx.GetOp().GetText()
 	switch op {
 	case "+": return v.currBlock.NewAdd(l, r)
@@ -615,8 +625,13 @@ func (v *MiniGoEncoder) VisitAddExpr(ctx *parser.AddExprContext) interface{} {
 }
 
 func (v *MiniGoEncoder) VisitRelExpr(ctx *parser.RelExprContext) interface{} {
-	l := ctx.Expression(0).Accept(v).(value.Value)
-	r := ctx.Expression(1).Accept(v).(value.Value)
+	lRes := ctx.Expression(0).Accept(v)
+	rRes := ctx.Expression(1).Accept(v)
+	if lRes == nil || rRes == nil {
+		return nil
+	}
+	l := lRes.(value.Value)
+	r := rRes.(value.Value)
 	op := ctx.GetOp().GetText()
 	var pred enum.IPred
 	switch op {
