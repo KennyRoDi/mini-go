@@ -292,7 +292,9 @@ func (v *MiniGoEncoder) VisitAssignmentStatement(ctx *parser.AssignmentStatement
 		ptr := v.getPointer(ctx.Expression(0))
 		if ptr == nil { return nil }
 		
-		val := ctx.Expression(1).Accept(v).(value.Value)
+		res := ctx.Expression(1).Accept(v)
+		if res == nil { return nil }
+		val := res.(value.Value)
 		
 		if op == "=" {
 			v.currBlock.NewStore(val, ptr)
@@ -481,8 +483,11 @@ func (v *MiniGoEncoder) VisitStatement(ctx *parser.StatementContext) interface{}
 		}
 		if text == "return" {
 			if ctx.Expression() != nil {
-				val := ctx.Expression().Accept(v).(value.Value)
-				v.currBlock.NewRet(val)
+				res := ctx.Expression().Accept(v)
+				if res != nil {
+					val := res.(value.Value)
+					v.currBlock.NewRet(val)
+				}
 			} else {
 				if v.currFunc.Name() == "main" {
 					v.currBlock.NewRet(constant.NewInt(types.I32, 0))
