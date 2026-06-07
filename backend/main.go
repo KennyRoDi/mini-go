@@ -8,6 +8,16 @@ import (
 	"minigo-backend/parser"
 )
 
+func runEncoder(encoder *MiniGoEncoder, tree antlr.ParseTree) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic: %v", r)
+		}
+	}()
+	tree.Accept(encoder)
+	return nil
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Println("Uso: minigo <archivo.go>")
@@ -60,7 +70,10 @@ func main() {
 	encoder := NewMiniGoEncoder(symbols)
 	encoder.NodeTypes = typeVisitor.NodeTypes
 	encoder.SymbolMap = typeVisitor.SymbolMap
-	tree.Accept(encoder)
+	if err := runEncoder(encoder, tree); err != nil {
+		fmt.Printf("Error interno en generacion de codigo: %v\n", err)
+		os.Exit(1)
+	}
 
 	outPath := "output"
 	err = encoder.Emit(outPath)

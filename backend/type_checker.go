@@ -146,7 +146,28 @@ func (v *TypeVisitor) VisitArguments(ctx *parser.ArgumentsContext) interface{} {
 	return []Type{}
 }
 
+func (v *TypeVisitor) VisitSimpleStatement(ctx *parser.SimpleStatementContext) interface{} {
+	if ctx.AssignmentStatement() != nil {
+		return ctx.AssignmentStatement().Accept(v)
+	}
+	if ctx.Expression() != nil {
+		return ctx.Expression().Accept(v)
+	}
+	for _, child := range ctx.GetChildren() {
+		if node, ok := child.(antlr.ParseTree); ok {
+			node.Accept(v)
+		}
+	}
+	return nil
+}
+
 func (v *TypeVisitor) VisitSingleVarDecl(ctx *parser.SingleVarDeclContext) interface{} {
+	if ctx.IdentifierList() == nil {
+		if ctx.SingleVarDeclNoExps() != nil {
+			return ctx.SingleVarDeclNoExps().Accept(v)
+		}
+		return nil
+	}
 	var targetType Type = T_UNKNOWN
 	if ctx.DeclType() != nil {
 		targetType = v.resolveType(ctx.DeclType())

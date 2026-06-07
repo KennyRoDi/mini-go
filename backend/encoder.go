@@ -121,8 +121,51 @@ func (v *MiniGoEncoder) VisitStatementList(ctx *parser.StatementListContext) int
 	return nil
 }
 
+func (v *MiniGoEncoder) VisitSingleVarDeclNoExps(ctx *parser.SingleVarDeclNoExpsContext) interface{} {
+	if ctx.IdentifierList() == nil {
+		return nil
+	}
+	for _, id := range ctx.IdentifierList().AllIDENTIFIER() {
+		name := id.GetText()
+		var t Type = T_UNKNOWN
+		if nt, ok := v.NodeTypes[id]; ok {
+			t = nt
+		}
+		llvmType := v.getLLVMType(t)
+
+		ident, hasIdent := v.SymbolMap[id]
+
+		isGlobal := v.currFunc == nil
+		var ptr value.Value
+		if isGlobal {
+			var init constant.Constant
+			switch llvmType {
+			case types.I1:
+				init = constant.NewInt(types.I1, 0)
+			case types.I8:
+				init = constant.NewInt(types.I8, 0)
+			default:
+				init = constant.NewInt(types.I32, 0)
+			}
+			ptr = v.Module.NewGlobalDef(name, init)
+		} else {
+			alloc := v.currBlock.NewAlloca(llvmType)
+			alloc.SetName(name)
+			ptr = alloc
+		}
+		if hasIdent {
+			v.symbolPointers[ident] = ptr
+		}
+		v.valorLLVM[id] = ptr
+	}
+	return nil
+}
+
 func (v *MiniGoEncoder) VisitSingleVarDecl(ctx *parser.SingleVarDeclContext) interface{} {
 	if ctx.IdentifierList() == nil {
+		if ctx.SingleVarDeclNoExps() != nil {
+			return ctx.SingleVarDeclNoExps().Accept(v)
+		}
 		return nil
 	}
 	for _, id := range ctx.IdentifierList().AllIDENTIFIER() {
@@ -412,7 +455,10 @@ func (v *MiniGoEncoder) VisitLoop(ctx *parser.LoopContext) interface{} {
 
 func (v *MiniGoEncoder) VisitSwitch_stmt(ctx *parser.Switch_stmtContext) interface{} {
 	if ctx.SimpleStatement() != nil { ctx.SimpleStatement().Accept(v) }
-	
+
+	if ctx.Expression() == nil {
+		return nil
+	}
 	res := ctx.Expression().Accept(v)
 	if res == nil {
 		return nil
@@ -462,8 +508,6 @@ func (v *MiniGoEncoder) VisitSwitch_stmt(ctx *parser.Switch_stmtContext) interfa
 
 func (v *MiniGoEncoder) VisitSimpleStatement(ctx *parser.SimpleStatementContext) interface{} {
 	if ctx.Expression() != nil {
-		// Handle i++ / i-- (postfix operators in grammar are part of simpleStatement)
-		// We need to check if there is an operator after the expression
 		if ctx.GetChildCount() > 1 {
 			if opNode, ok := ctx.GetChild(1).(antlr.TerminalNode); ok {
 				op := opNode.GetText()
@@ -483,8 +527,21 @@ func (v *MiniGoEncoder) VisitSimpleStatement(ctx *parser.SimpleStatementContext)
 				}
 			}
 		}
+		// Expresión standalone (sin ++ ni --)
+		return ctx.Expression().Accept(v)
 	}
-	return v.VisitChildren(ctx)
+	if ctx.AssignmentStatement() != nil {
+		return ctx.AssignmentStatement().Accept(v)
+	}
+	// expressionList ':=' expressionList (short variable declaration)
+	if ctx.GetChildCount() >= 3 {
+		for _, child := range ctx.GetChildren() {
+			if node, ok := child.(antlr.ParseTree); ok {
+				node.Accept(v)
+			}
+		}
+	}
+	return nil
 }
 
 func (v *MiniGoEncoder) VisitStatement(ctx *parser.StatementContext) interface{} {
@@ -558,7 +615,11 @@ func (v *MiniGoEncoder) VisitPrimaryExpression(ctx *parser.PrimaryExpressionCont
 				argCtx := ctx.Arguments().(*parser.ArgumentsContext)
 				if argCtx.ExpressionList() != nil {
 					for _, expr := range argCtx.ExpressionList().(*parser.ExpressionListContext).AllExpression() {
-						args = append(args, expr.Accept(v).(value.Value))
+						res := expr.Accept(v)
+						if res == nil {
+							return nil
+						}
+						args = append(args, res.(value.Value))
 					}
 				}
 				return v.currBlock.NewCall(target, args...)
