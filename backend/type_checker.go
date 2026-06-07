@@ -33,7 +33,6 @@ func (v *TypeVisitor) reportError(msg string, detail string, ctx antlr.ParserRul
 	line := ctx.GetStart().GetLine()
 	column := ctx.GetStart().GetColumn()
 	errorStr := fmt.Sprintf("ERROR DE TIPO: %s (%s) [linea:%d - columna:%d]", msg, detail, line, column)
-	fmt.Println(errorStr)
 	v.Errors = append(v.Errors, errorStr)
 	// Eliminamos el panic para permitir la recuperación de errores y evitar el desplome del backend.
 }
