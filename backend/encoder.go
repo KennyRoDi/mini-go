@@ -236,39 +236,43 @@ func (v *MiniGoEncoder) VisitFuncDecl(ctx *parser.FuncDeclContext) interface{} {
 }
 
 func (v *MiniGoEncoder) getPointer(ctx antlr.ParseTree) value.Value {
-	if ctx == nil { return nil }
-
-	if op, ok := ctx.(*parser.OperandContext); ok && op.IDENTIFIER() != nil {
-		term := op.IDENTIFIER()
-		if ident, ok := v.SymbolMap[term]; ok {
-			return v.symbolPointers[ident]
-		}
+	if ctx == nil {
+		return nil
 	}
 
-	if pe, ok := ctx.(*parser.PrimaryExpressionContext); ok {
-		if pe.Operand() != nil {
-			return v.getPointer(pe.Operand())
+	switch node := ctx.(type) {
+	case *parser.OperandContext:
+		if node.IDENTIFIER() != nil {
+			term := node.IDENTIFIER()
+			if ident, ok := v.SymbolMap[term]; ok {
+				return v.symbolPointers[ident]
+			}
 		}
-		
-		if pe.PrimaryExpression() != nil {
-			basePtr := v.getPointer(pe.PrimaryExpression())
-			if basePtr == nil { return nil }
-			
+	case *parser.PrimaryExpressionContext:
+		if node.Operand() != nil {
+			return v.getPointer(node.Operand())
+		}
+		if node.PrimaryExpression() != nil {
+			basePtr := v.getPointer(node.PrimaryExpression())
+			if basePtr == nil {
+				return nil
+			}
 			baseType := basePtr.Type().(*types.PointerType).ElemType
-
-			if pe.Index() != nil {
-				idxVal := pe.Index().(*parser.IndexContext).Expression().Accept(v).(value.Value)
+			if node.Index() != nil {
+				idxVal := node.Index().(*parser.IndexContext).Expression().Accept(v).(value.Value)
 				zero := constant.NewInt(types.I32, 0)
 				return v.currBlock.NewGetElementPtr(baseType, basePtr, zero, idxVal)
 			}
-			
-			if pe.Selector() != nil {
-				fieldName := pe.Selector().(*parser.SelectorContext).IDENTIFIER().GetText()
-				t := v.NodeTypes[pe.PrimaryExpression()]
+			if node.Selector() != nil {
+				fieldName := node.Selector().(*parser.SelectorContext).IDENTIFIER().GetText()
+				t := v.NodeTypes[node.PrimaryExpression()]
 				if st, ok := t.(StructType); ok {
 					fieldIdx := -1
 					for i, name := range st.OrderedFields {
-						if name == fieldName { fieldIdx = i; break }
+						if name == fieldName {
+							fieldIdx = i
+							break
+						}
 					}
 					if fieldIdx != -1 {
 						zero := constant.NewInt(types.I32, 0)
@@ -278,20 +282,16 @@ func (v *MiniGoEncoder) getPointer(ctx antlr.ParseTree) value.Value {
 				}
 			}
 		}
-	}
-
-	if expr, ok := ctx.(*parser.PrimaryExprContext); ok {
-		return v.getPointer(expr.PrimaryExpression())
-	}
-
-	if exprCtx, ok := ctx.(parser.IExpressionContext); ok {
-		if exprCtx.GetChildCount() > 0 {
-			if child, ok := exprCtx.GetChild(0).(antlr.ParseTree); ok {
+	case *parser.PrimaryExprContext:
+		return v.getPointer(node.PrimaryExpression())
+	case parser.IExpressionContext:
+		if node.GetChildCount() > 0 {
+			if child, ok := node.GetChild(0).(antlr.ParseTree); ok {
 				return v.getPointer(child)
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -567,10 +567,7 @@ func (v *MiniGoEncoder) VisitPrimaryExpression(ctx *parser.PrimaryExpressionCont
 		
 		ptr := v.getPointer(ctx)
 		if ptr != nil {
-			fmt.Printf("DEBUG ENCODER: Loading %s from pointer type %s\n", ctx.GetText(), ptr.Type().String())
 			return v.currBlock.NewLoad(ptr.Type().(*types.PointerType).ElemType, ptr)
-		} else {
-			fmt.Printf("DEBUG ENCODER: Pointer for %s IS NIL\n", ctx.GetText())
 		}
 	}
 	return nil
