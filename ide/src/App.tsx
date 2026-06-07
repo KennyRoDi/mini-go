@@ -207,8 +207,14 @@ const App: React.FC = () => {
               </div>
             ))}
             <Plus size={14} className="mx-4 text-[#858585] cursor-pointer hover:text-white flex-shrink-0" onClick={handleNewFile} />
-            <div className="ml-auto px-4">
-               {isCompiling && <div className="text-[#5fb3b3] text-[10px] animate-pulse uppercase font-bold">Compiling...</div>}
+            <div className="ml-auto px-3 flex-shrink-0">
+              <button
+                onClick={handleRun}
+                disabled={isCompiling || !activeTab}
+                className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-bold transition-colors ${isCompiling || !activeTab ? 'bg-[#333] text-[#555] cursor-not-allowed' : 'bg-[#3a7c3a] text-white hover:bg-[#4a9c4a] cursor-pointer'}`}
+              >
+                {isCompiling ? <span className="animate-pulse">Compiling...</span> : <span>▶ Run</span>}
+              </button>
             </div>
           </div>
 

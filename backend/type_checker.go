@@ -150,6 +150,36 @@ func (v *TypeVisitor) VisitSimpleStatement(ctx *parser.SimpleStatementContext) i
 	if ctx.AssignmentStatement() != nil {
 		return ctx.AssignmentStatement().Accept(v)
 	}
+	// Handle short variable declaration: expressionList ':=' expressionList
+	lists := ctx.AllExpressionList()
+	if len(lists) >= 2 {
+		rightExprs := lists[1].(*parser.ExpressionListContext).AllExpression()
+		leftExprs := lists[0].(*parser.ExpressionListContext).AllExpression()
+		for i, rExpr := range rightExprs {
+			res := rExpr.Accept(v)
+			if res == nil { continue }
+			rType := res.(Type)
+			if i < len(leftExprs) {
+				lText := leftExprs[i].GetText()
+				ident := &Ident{Nombre: lText, Nivel: v.Symbols.NivelActual, Tipo: rType}
+				v.Symbols.Tabla = append(v.Symbols.Tabla, ident)
+				// Map the terminal node of left expression to the new ident
+				if op, ok := leftExprs[i].(*parser.PrimaryExprContext); ok {
+					if pe, ok2 := op.PrimaryExpression().(*parser.PrimaryExpressionContext); ok2 {
+						if pe.Operand() != nil {
+							if opCtx, ok3 := pe.Operand().(*parser.OperandContext); ok3 {
+								if opCtx.IDENTIFIER() != nil {
+									v.SymbolMap[opCtx.IDENTIFIER()] = ident
+									v.NodeTypes[opCtx.IDENTIFIER()] = rType
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		return nil
+	}
 	if ctx.Expression() != nil {
 		return ctx.Expression().Accept(v)
 	}
@@ -460,10 +490,15 @@ func (v *TypeVisitor) VisitOperand(ctx *parser.OperandContext) interface{} {
 		t = ctx.Literal().Accept(v).(Type)
 	} else if ctx.IDENTIFIER() != nil {
 		name := ctx.IDENTIFIER().GetText()
-		ident, found := v.Symbols.Lookup(name)
-		if found {
-			t = ident.Tipo
-			v.SymbolMap[ctx.IDENTIFIER()] = ident
+		if name == "true" || name == "false" {
+			t = T_BOOL
+			v.NodeTypes[ctx.IDENTIFIER()] = T_BOOL
+		} else {
+			ident, found := v.Symbols.Lookup(name)
+			if found {
+				t = ident.Tipo
+				v.SymbolMap[ctx.IDENTIFIER()] = ident
+			}
 		}
 	} else if ctx.Expression() != nil {
 		t = ctx.Expression().Accept(v).(Type)
@@ -501,6 +536,20 @@ func (v *TypeVisitor) VisitTypeDecl(ctx *parser.TypeDeclContext) interface{} {
 	return nil
 }
 
+func (v *TypeVisitor) VisitLengthExpression(ctx *parser.LengthExpressionContext) interface{} {
+	ctx.Expression().Accept(v)
+	v.NodeTypes[ctx] = T_INT
+	v.NodeTypes[ctx.GetRuleContext()] = T_INT
+	return T_INT
+}
+
+func (v *TypeVisitor) VisitCapExpression(ctx *parser.CapExpressionContext) interface{} {
+	ctx.Expression().Accept(v)
+	v.NodeTypes[ctx] = T_INT
+	v.NodeTypes[ctx.GetRuleContext()] = T_INT
+	return T_INT
+}
+
 func (v *TypeVisitor) VisitIndex(ctx *parser.IndexContext) interface{} {
 	return ctx.Expression().Accept(v)
 }
@@ -511,6 +560,12 @@ func (v *TypeVisitor) VisitSelector(ctx *parser.SelectorContext) interface{} {
 
 func (v *TypeVisitor) VisitPrimaryExpression(ctx *parser.PrimaryExpressionContext) interface{} {
 	var t Type = T_UNKNOWN
+	if ctx.LengthExpression() != nil {
+		return ctx.LengthExpression().Accept(v)
+	}
+	if ctx.CapExpression() != nil {
+		return ctx.CapExpression().Accept(v)
+	}
 	if ctx.Operand() != nil {
 		t = ctx.Operand().Accept(v).(Type)
 	} else if ctx.PrimaryExpression() != nil {
