@@ -284,16 +284,16 @@ func (v *MiniGoEncoder) getPointer(ctx antlr.ParseTree) value.Value {
 		return v.getPointer(expr.PrimaryExpression())
 	}
 
-	if exprCtx, ok := ctx.(*parser.ExpressionContext); ok {
+	if exprCtx, ok := ctx.(parser.IExpressionContext); ok {
 		if exprCtx.GetChildCount() > 0 {
 			if child, ok := exprCtx.GetChild(0).(antlr.ParseTree); ok {
 				return v.getPointer(child)
 			}
 		}
 	}
-
+	
 	return nil
-	}
+}
 
 func (v *MiniGoEncoder) VisitAssignmentStatement(ctx *parser.AssignmentStatementContext) interface{} {
 	var op string
@@ -347,7 +347,9 @@ func (v *MiniGoEncoder) VisitAssignmentStatement(ctx *parser.AssignmentStatement
 func (v *MiniGoEncoder) VisitIfStatement(ctx *parser.IfStatementContext) interface{} {
 	if ctx.SimpleStatement() != nil { ctx.SimpleStatement().Accept(v) }
 	
-	cond := ctx.Expression().Accept(v).(value.Value)
+	res := ctx.Expression().Accept(v)
+	if res == nil { return nil }
+	cond := res.(value.Value)
 	
 	thenBlock := v.currFunc.NewBlock("if.then")
 	elseBlock := v.currFunc.NewBlock("if.else")
@@ -386,7 +388,9 @@ func (v *MiniGoEncoder) VisitLoop(ctx *parser.LoopContext) interface{} {
 	
 	var cond value.Value = constant.NewInt(types.I1, 1)
 	if ctx.Expression() != nil {
-		cond = ctx.Expression().Accept(v).(value.Value)
+		res := ctx.Expression().Accept(v)
+		if res == nil { return nil }
+		cond = res.(value.Value)
 	}
 	v.currBlock.NewCondBr(cond, bodyBlock, exitBlock)
 	
