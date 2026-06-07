@@ -229,17 +229,32 @@ func (v *TypeVisitor) VisitFuncArgDecls(ctx *parser.FuncArgDeclsContext) interfa
 }
 
 func (v *TypeVisitor) VisitAssignmentStatement(ctx *parser.AssignmentStatementContext) interface{} {
-	exprs := ctx.AllExpression()
-	if len(exprs) >= 2 {
-		left := exprs[0].Accept(v)
-		right := exprs[1].Accept(v)
-		if left != nil && right != nil {
-			lt := left.(Type)
-			rt := right.(Type)
-			if !lt.Equals(rt) {
-				v.reportError("Incompatibilidad de tipos en asignacion", 
-					fmt.Sprintf("tipos %s y %s no coinciden", lt.String(), rt.String()), ctx)
-			}
+	var left, right interface{}
+	var isValid bool
+
+	if ctx.GetOp() != nil {
+		exprs := ctx.AllExpression()
+		if len(exprs) >= 2 {
+			left = exprs[0].Accept(v)
+			right = exprs[1].Accept(v)
+			isValid = true
+		}
+	} else if len(ctx.AllExpressionList()) >= 2 {
+		leftList := ctx.ExpressionList(0).Accept(v).([]Type)
+		rightList := ctx.ExpressionList(1).Accept(v).([]Type)
+		if len(leftList) > 0 && len(rightList) > 0 {
+			left = leftList[0]
+			right = rightList[0]
+			isValid = true
+		}
+	}
+
+	if isValid && left != nil && right != nil {
+		lt := left.(Type)
+		rt := right.(Type)
+		if !lt.Equals(rt) && !lt.Equals(T_UNKNOWN) && !rt.Equals(T_UNKNOWN) {
+			v.reportError("Incompatibilidad de tipos en asignacion", 
+				fmt.Sprintf("tipos %s y %s no coinciden", lt.String(), rt.String()), ctx)
 		}
 	}
 	return nil

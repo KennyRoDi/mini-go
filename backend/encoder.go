@@ -283,35 +283,62 @@ func (v *MiniGoEncoder) getPointer(ctx antlr.ParseTree) value.Value {
 	if expr, ok := ctx.(*parser.PrimaryExprContext); ok {
 		return v.getPointer(expr.PrimaryExpression())
 	}
+
+	if exprCtx, ok := ctx.(*parser.ExpressionContext); ok {
+		if exprCtx.GetChildCount() > 0 {
+			if child, ok := exprCtx.GetChild(0).(antlr.ParseTree); ok {
+				return v.getPointer(child)
+			}
+		}
+	}
+
 	return nil
-}
+	}
 
 func (v *MiniGoEncoder) VisitAssignmentStatement(ctx *parser.AssignmentStatementContext) interface{} {
+	var op string
 	if ctx.GetOp() != nil {
-		op := ctx.GetOp().GetText()
-		ptr := v.getPointer(ctx.Expression(0))
-		if ptr == nil { return nil }
-		
+		op = ctx.GetOp().GetText()
+	} else {
+		op = "="
+	}
+
+	var ptr value.Value
+	var val value.Value
+
+	if op == "=" {
+		if len(ctx.AllExpressionList()) >= 2 {
+			exprListLeft := ctx.ExpressionList(0).(*parser.ExpressionListContext)
+			exprListRight := ctx.ExpressionList(1).(*parser.ExpressionListContext)
+			if len(exprListLeft.AllExpression()) > 0 && len(exprListRight.AllExpression()) > 0 {
+				ptr = v.getPointer(exprListLeft.Expression(0))
+				res := exprListRight.Expression(0).Accept(v)
+				if res != nil { val = res.(value.Value) }
+			}
+		}
+	} else {
+		ptr = v.getPointer(ctx.Expression(0))
 		res := ctx.Expression(1).Accept(v)
-		if res == nil { return nil }
-		val := res.(value.Value)
-		
-		if op == "=" {
-			v.currBlock.NewStore(val, ptr)
-		} else {
-			oldVal := v.currBlock.NewLoad(ptr.Type().(*types.PointerType).ElemType, ptr)
-			var newVal value.Value
-			switch op {
-			case "+=": newVal = v.currBlock.NewAdd(oldVal, val)
-			case "-=": newVal = v.currBlock.NewSub(oldVal, val)
-			case "*=": newVal = v.currBlock.NewMul(oldVal, val)
-			case "/=": newVal = v.currBlock.NewSDiv(oldVal, val)
-			case "<<=": newVal = v.currBlock.NewShl(oldVal, val)
-			case ">>=": newVal = v.currBlock.NewAShr(oldVal, val)
-			}
-			if newVal != nil {
-				v.currBlock.NewStore(newVal, ptr)
-			}
+		if res != nil { val = res.(value.Value) }
+	}
+
+	if ptr == nil || val == nil { return nil }
+	
+	if op == "=" {
+		v.currBlock.NewStore(val, ptr)
+	} else {
+		oldVal := v.currBlock.NewLoad(ptr.Type().(*types.PointerType).ElemType, ptr)
+		var newVal value.Value
+		switch op {
+		case "+=": newVal = v.currBlock.NewAdd(oldVal, val)
+		case "-=": newVal = v.currBlock.NewSub(oldVal, val)
+		case "*=": newVal = v.currBlock.NewMul(oldVal, val)
+		case "/=": newVal = v.currBlock.NewSDiv(oldVal, val)
+		case "<<=": newVal = v.currBlock.NewShl(oldVal, val)
+		case ">>=": newVal = v.currBlock.NewAShr(oldVal, val)
+		}
+		if newVal != nil {
+			v.currBlock.NewStore(newVal, ptr)
 		}
 	}
 	return nil
