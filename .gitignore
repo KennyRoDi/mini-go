@@ -1,9 +1,14 @@
 backend/antlr-4.13.1-complete.jar
 backend/minigo
+backend/minigo-backend
+backend/encoder
 backend/output
 backend/output.ll
 backend/parser/*.interp
 backend/parser/*.tokens
+backend/test_panic_repro.go
+docs/*.pdf
+docs/*.docx
 ide/dist/
 ide/node_modules/
 ide/output
