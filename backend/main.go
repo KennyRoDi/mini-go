@@ -8,6 +8,16 @@ import (
 	"minigo-backend/parser"
 )
 
+func runEncoder(encoder *MiniGoEncoder, tree antlr.ParseTree) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic: %v", r)
+		}
+	}()
+	tree.Accept(encoder)
+	return nil
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Println("Uso: minigo <archivo.go>")
@@ -22,7 +32,7 @@ func main() {
 	}
 
 	// Lexer
-	lexer := parser.NewAlphaCompilerLexer(input)
+	lexer := parser.NewminigoLexer(input)
 	lexerErrors := NewCustomErrorListener()
 	lexer.RemoveErrorListeners()
 	lexer.AddErrorListener(lexerErrors)
@@ -30,7 +40,7 @@ func main() {
 	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
 
 	// Parser
-	p := parser.NewAlphaCompilerParser(stream)
+	p := parser.NewminigoParser(stream)
 	parserErrors := NewCustomErrorListener()
 	p.RemoveErrorListeners()
 	p.AddErrorListener(parserErrors)
@@ -42,20 +52,10 @@ func main() {
 	if lexerErrors.HasErrors() || parserErrors.HasErrors() {
 		lexerErrors.PrintErrors()
 		parserErrors.PrintErrors()
+		os.Exit(1)
 	}
 
-	// Fase de Alcances (Scope Checking)
-	scopeVisitor := NewScopeVisitor()
-	tree.Accept(scopeVisitor)
-
-	if len(scopeVisitor.Errors) > 0 {
-		for _, err := range scopeVisitor.Errors {
-			fmt.Println(err)
-		}
-	}
-
-	// Fase de Tipos (Type Checking)
-	// Reset symbol table for the new pass
+	// Fase de Tipos (Semantic Analysis)
 	symbols := NewTablaSimbolos()
 	typeVisitor := NewTypeVisitor(symbols)
 	tree.Accept(typeVisitor)
@@ -64,11 +64,17 @@ func main() {
 		for _, err := range typeVisitor.Errors {
 			fmt.Println(err)
 		}
+		os.Exit(1)
 	}
 
 	// Fase de Generacion de Codigo (LLVM IR)
-	encoder := NewAlphaCompilerEncoder(symbols)
-	tree.Accept(encoder)
+	encoder := NewMiniGoEncoder(symbols)
+	encoder.NodeTypes = typeVisitor.NodeTypes
+	encoder.SymbolMap = typeVisitor.SymbolMap
+	if err := runEncoder(encoder, tree); err != nil {
+		fmt.Printf("Error interno en generacion de codigo: %v\n", err)
+		os.Exit(1)
+	}
 
 	outPath := "output"
 	err = encoder.Emit(outPath)

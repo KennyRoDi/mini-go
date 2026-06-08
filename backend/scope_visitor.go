@@ -7,16 +7,15 @@ import (
 )
 
 type ScopeVisitor struct {
-	*parser.BaseAlphaCompilerVisitor
+	*parser.BaseminigoVisitor
 	Symbols *TablaSimbolos
 	Errors  []string
 }
 
 func NewScopeVisitor() *ScopeVisitor {
 	return &ScopeVisitor{
-		BaseAlphaCompilerVisitor: &parser.BaseAlphaCompilerVisitor{},
-		Symbols:                  NewTablaSimbolos(),
-		Errors:                   []string{},
+		BaseminigoVisitor: &parser.BaseminigoVisitor{},
+		Errors:            []string{},
 	}
 }
 
@@ -26,10 +25,37 @@ func (v *ScopeVisitor) reportError(msg string, ctx antlr.ParserRuleContext) {
 	v.Errors = append(v.Errors, fmt.Sprintf("ERROR DE ALCANCE: %s [linea:%d - columna:%d]", msg, line, column))
 }
 
-func (v *ScopeVisitor) VisitSingleVarDecl(ctx *parser.SingleVarDeclContext) interface{} {
-	tipo := T_UNKNOWN
+func (v *ScopeVisitor) resolveType(ctx parser.IDeclTypeContext) Type {
+	if ctx == nil { return T_UNKNOWN }
+	if ctx.IDENTIFIER() != nil {
+		return GetBasicType(ctx.IDENTIFIER().GetText())
+	}
+	if ctx.SliceDeclType() != nil {
+		return SliceType{Elem: v.resolveType(ctx.SliceDeclType().DeclType())}
+	}
+	if ctx.ArrayDeclType() != nil {
+		var size int
+		fmt.Sscanf(ctx.ArrayDeclType().INTLITERAL().GetText(), "%d", &size)
+		return ArrayType{Elem: v.resolveType(ctx.ArrayDeclType().DeclType()), Size: size}
+	}
+	if ctx.StructDeclType() != nil {
+		// Basic support for structs in scope pass
+		return StructType{Fields: make(map[string]Type)}
+	}
 	if ctx.DeclType() != nil {
-		tipo = GetMagicType(ctx.DeclType().GetText())
+		return v.resolveType(ctx.DeclType())
+	}
+	return T_UNKNOWN
+}
+
+func (v *ScopeVisitor) VisitFuncArgDecls(ctx *parser.FuncArgDeclsContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *ScopeVisitor) VisitSingleVarDecl(ctx *parser.SingleVarDeclContext) interface{} {
+	var tipo Type = T_UNKNOWN
+	if ctx.DeclType() != nil {
+		tipo = v.resolveType(ctx.DeclType())
 	}
 	if ctx.IdentifierList() != nil {
 		ids := ctx.IdentifierList().AllIDENTIFIER()
@@ -44,9 +70,9 @@ func (v *ScopeVisitor) VisitSingleVarDecl(ctx *parser.SingleVarDeclContext) inte
 }
 
 func (v *ScopeVisitor) VisitSingleVarDeclNoExps(ctx *parser.SingleVarDeclNoExpsContext) interface{} {
-	tipo := T_UNKNOWN
+	var tipo Type = T_UNKNOWN
 	if ctx.DeclType() != nil {
-		tipo = GetMagicType(ctx.DeclType().GetText())
+		tipo = v.resolveType(ctx.DeclType())
 	}
 	if ctx.IdentifierList() != nil {
 		ids := ctx.IdentifierList().AllIDENTIFIER()
@@ -64,11 +90,12 @@ func (v *ScopeVisitor) VisitFuncDecl(ctx *parser.FuncDeclContext) interface{} {
 	funcFront := ctx.FuncFrontDecl().(*parser.FuncFrontDeclContext)
 	funcName := funcFront.IDENTIFIER().GetText()
 	
-	tipoRetorno := T_VOID
+	var tipoRetorno Type = T_VOID
 	if funcFront.DeclType() != nil {
-		tipoRetorno = GetMagicType(funcFront.DeclType().GetText())
+		tipoRetorno = v.resolveType(funcFront.DeclType())
 	}
 
+	// For now, store it as its return type. In Phase 2 we will use FuncType.
 	if err := v.Symbols.Insert(funcName, tipoRetorno); err != nil {
 		v.reportError(err.Error(), ctx)
 	}

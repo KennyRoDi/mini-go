@@ -1,11 +1,10 @@
-// Code generated from AlphaCompiler.g4 by ANTLR 4.13.1. DO NOT EDIT.
+// Code generated from backend/minigo.g4 by ANTLR 4.13.1. DO NOT EDIT.
 
-package parser // AlphaCompiler
-
+package parser // minigo
 import "github.com/antlr4-go/antlr/v4"
 
-// AlphaCompilerListener is a complete listener for a parse tree produced by AlphaCompilerParser.
-type AlphaCompilerListener interface {
+// minigoListener is a complete listener for a parse tree produced by minigoParser.
+type minigoListener interface {
 	antlr.ParseTreeListener
 
 	// EnterRoot is called when entering the root production.
@@ -35,15 +34,6 @@ type AlphaCompilerListener interface {
 	// EnterSingleTypeDecl is called when entering the singleTypeDecl production.
 	EnterSingleTypeDecl(c *SingleTypeDeclContext)
 
-	// EnterFuncDecl is called when entering the funcDecl production.
-	EnterFuncDecl(c *FuncDeclContext)
-
-	// EnterFuncFrontDecl is called when entering the funcFrontDecl production.
-	EnterFuncFrontDecl(c *FuncFrontDeclContext)
-
-	// EnterFuncArgDecls is called when entering the funcArgDecls production.
-	EnterFuncArgDecls(c *FuncArgDeclsContext)
-
 	// EnterDeclType is called when entering the declType production.
 	EnterDeclType(c *DeclTypeContext)
 
@@ -59,8 +49,20 @@ type AlphaCompilerListener interface {
 	// EnterStructMemDecls is called when entering the structMemDecls production.
 	EnterStructMemDecls(c *StructMemDeclsContext)
 
+	// EnterFuncDecl is called when entering the funcDecl production.
+	EnterFuncDecl(c *FuncDeclContext)
+
+	// EnterFuncFrontDecl is called when entering the funcFrontDecl production.
+	EnterFuncFrontDecl(c *FuncFrontDeclContext)
+
+	// EnterFuncArgDecls is called when entering the funcArgDecls production.
+	EnterFuncArgDecls(c *FuncArgDeclsContext)
+
 	// EnterIdentifierList is called when entering the identifierList production.
 	EnterIdentifierList(c *IdentifierListContext)
+
+	// EnterExpressionList is called when entering the expressionList production.
+	EnterExpressionList(c *ExpressionListContext)
 
 	// EnterUnaryExpr is called when entering the unaryExpr production.
 	EnterUnaryExpr(c *UnaryExprContext)
@@ -82,9 +84,6 @@ type AlphaCompilerListener interface {
 
 	// EnterAndExpr is called when entering the andExpr production.
 	EnterAndExpr(c *AndExprContext)
-
-	// EnterExpressionList is called when entering the expressionList production.
-	EnterExpressionList(c *ExpressionListContext)
 
 	// EnterPrimaryExpression is called when entering the primaryExpression production.
 	EnterPrimaryExpression(c *PrimaryExpressionContext)
@@ -113,11 +112,11 @@ type AlphaCompilerListener interface {
 	// EnterCapExpression is called when entering the capExpression production.
 	EnterCapExpression(c *CapExpressionContext)
 
-	// EnterStatementList is called when entering the statementList production.
-	EnterStatementList(c *StatementListContext)
-
 	// EnterBlock is called when entering the block production.
 	EnterBlock(c *BlockContext)
+
+	// EnterStatementList is called when entering the statementList production.
+	EnterStatementList(c *StatementListContext)
 
 	// EnterStatement is called when entering the statement production.
 	EnterStatement(c *StatementContext)
@@ -173,15 +172,6 @@ type AlphaCompilerListener interface {
 	// ExitSingleTypeDecl is called when exiting the singleTypeDecl production.
 	ExitSingleTypeDecl(c *SingleTypeDeclContext)
 
-	// ExitFuncDecl is called when exiting the funcDecl production.
-	ExitFuncDecl(c *FuncDeclContext)
-
-	// ExitFuncFrontDecl is called when exiting the funcFrontDecl production.
-	ExitFuncFrontDecl(c *FuncFrontDeclContext)
-
-	// ExitFuncArgDecls is called when exiting the funcArgDecls production.
-	ExitFuncArgDecls(c *FuncArgDeclsContext)
-
 	// ExitDeclType is called when exiting the declType production.
 	ExitDeclType(c *DeclTypeContext)
 
@@ -197,8 +187,20 @@ type AlphaCompilerListener interface {
 	// ExitStructMemDecls is called when exiting the structMemDecls production.
 	ExitStructMemDecls(c *StructMemDeclsContext)
 
+	// ExitFuncDecl is called when exiting the funcDecl production.
+	ExitFuncDecl(c *FuncDeclContext)
+
+	// ExitFuncFrontDecl is called when exiting the funcFrontDecl production.
+	ExitFuncFrontDecl(c *FuncFrontDeclContext)
+
+	// ExitFuncArgDecls is called when exiting the funcArgDecls production.
+	ExitFuncArgDecls(c *FuncArgDeclsContext)
+
 	// ExitIdentifierList is called when exiting the identifierList production.
 	ExitIdentifierList(c *IdentifierListContext)
+
+	// ExitExpressionList is called when exiting the expressionList production.
+	ExitExpressionList(c *ExpressionListContext)
 
 	// ExitUnaryExpr is called when exiting the unaryExpr production.
 	ExitUnaryExpr(c *UnaryExprContext)
@@ -220,9 +222,6 @@ type AlphaCompilerListener interface {
 
 	// ExitAndExpr is called when exiting the andExpr production.
 	ExitAndExpr(c *AndExprContext)
-
-	// ExitExpressionList is called when exiting the expressionList production.
-	ExitExpressionList(c *ExpressionListContext)
 
 	// ExitPrimaryExpression is called when exiting the primaryExpression production.
 	ExitPrimaryExpression(c *PrimaryExpressionContext)
@@ -251,11 +250,11 @@ type AlphaCompilerListener interface {
 	// ExitCapExpression is called when exiting the capExpression production.
 	ExitCapExpression(c *CapExpressionContext)
 
-	// ExitStatementList is called when exiting the statementList production.
-	ExitStatementList(c *StatementListContext)
-
 	// ExitBlock is called when exiting the block production.
 	ExitBlock(c *BlockContext)
+
+	// ExitStatementList is called when exiting the statementList production.
+	ExitStatementList(c *StatementListContext)
 
 	// ExitStatement is called when exiting the statement production.
 	ExitStatement(c *StatementContext)

@@ -1,66 +1,147 @@
 # Mini-GO Compiler & Desktop IDE
 
-Welcome to the **Mini-GO** project, a fully functional Desktop IDE and Compiler for a subset of the Go language. This project (codenamed **AlphaCompiler**) was built with strict adherence to architectural mandates, including linear symbol table management and native LLVM IR generation.
+---
 
-## Overview
+## Descripción General
 
-Mini-GO is designed to provide a high-fidelity development experience. The system is divided into two primary components:
-1.  **Backend (Go):** A high-performance compiler built with **ANTLR4** for lexical/syntactic analysis and **llir/llvm** for code generation.
-2.  **Frontend (Electron + TypeScript):** A professional, dark-themed IDE with a focused workspace and integrated terminal.
+Mini-GO es un sistema completo de compilador e IDE para un lenguaje subconjunto de Go. El proyecto consta de dos componentes principales:
 
-## Technical Architecture
+1. **Backend (Go):** Un compilador construido con ANTLR4 para análisis léxico y sintáctico, e LLVM IR para generación de código.
+2. **Frontend (Electron + React + TypeScript):** Un entorno integrado de desarrollo con Monaco Editor y diagnósticos en tiempo real.
 
-### 1. Compiler Backend
-*   **Parser/Lexer:** Generated via ANTLR4 (Go target).
-*   **Symbol Table:** Implemented as a linear sequential list (`O(n)` lookups) with scope-based purging, as per architectural requirements.
-*   **Type System:** Uses hardcoded magic numbers (`0=int`, `1=char`, `2=bool`, `3=string`, `4=void`).
-*   **Semantic Passes:** 
-    *   **Scope Pass:** Handles identifier declaration and visibility.
-    *   **Type Pass:** Performs strict type validation with branch isolation (panic/recover).
-*   **Code Gen:** Produces **LLVM IR**, which is then linked via **Clang** to create native executables.
+### Arquitectura
 
-### 2. Desktop IDE
-*   **Stack:** Electron, TypeScript, HTML5/CSS3.
-*   **Icons:** Lucide React icons for a professional look.
-*   **IPC:** Spawns the Go compiler as a child process and parses real-time diagnostics.
+#### Backend del Compilador
+- **Lexer/Parser:** Generado mediante ANTLR4 a partir del archivo de gramática `minigo.g4`
+- **Tabla de Símbolos:** Seguimiento de identificadores con gestión jerárquica de alcances
+- **Sistema de Tipos:** Verificación de tipos estricta con soporte para int, bool, string, char y void
+- **Análisis Semántico:**
+  - Detección de redeclaraciones de variables
+  - Validación de variables declaradas
+  - Compatibilidad de tipos en asignaciones y operaciones
+  - Verificación de condiciones booleanas en control de flujo
+- **Generación de Código:** Producción de LLVM IR vinculado en ejecutables nativos
 
-## Onboarding & Requirements
+#### IDE de Escritorio
+- **Stack:** Electron, React, TypeScript, Tailwind CSS, Monaco Editor
+- **Arquitectura:** Comunicación IPC con el compilador para diagnósticos en tiempo real
+- **Características:** Resaltado de sintaxis, reportes de error con posición, terminal integrada
 
-To run this project, you need the following tools installed:
+---
 
-1.  **Go (Golang):** Version 1.20+
-2.  **Node.js & npm:** For the Electron frontend.
-3.  **Clang:** Required by the backend to link LLVM IR into executables.
-4.  **Java (JRE):** Only if you need to regenerate the ANTLR4 parser from the `.g4` file.
+## Requisitos del Sistema
 
-## Execution Steps
+Las siguientes herramientas deben estar instaladas:
 
-### 1. Build the Compiler Backend
-Navigate to the backend directory and compile the `minigo` binary:
+1. **Go (Golang):** Versión 1.20 o posterior
+2. **Node.js & pnpm:** Node.js 16+, pnpm 8+
+3. **Clang/LLVM:** Requerido para vinculación de LLVM IR
+4. **Java Runtime (JRE):** Opcional, solo si se regenera el parser ANTLR4
+
+**Nota para Windows:** LLVM debe estar en PATH o configurado explícitamente para clang.
+
+---
+
+## Instrucciones de Compilación
+
+### Paso 1: Backend del Compilador
+
 ```bash
-cd MiniGo/backend
+cd backend
 go mod tidy
 go build -o minigo .
+cd ..
 ```
 
-### 2. Build and Launch the IDE
-Navigate to the ide directory, install dependencies, and start the application:
+**En Windows (PowerShell):**
+```powershell
+go build -o minigo.exe .
+```
+
+### Paso 2: Frontend del IDE
+
 ```bash
-cd ../ide
-npm install
-npm run start
+cd ide
+pnpm install
+cd ..
 ```
 
-## Mini-GO Language Features
-The current version supports:
-*   **Variable Declarations:** `var x int = 10;`
-*   **Arithmetic:** `+`, `-`, `*`, `/` (Integer only for now).
-*   **Control Flow:** `if` statements with boolean conditions.
-*   **Standard I/O:** `print()` and `println()` (mapped to native `printf`).
-*   **Main Entry:** Automatic synthesis of `func main()` for global statements.
+---
 
-## Future Improvements
-*   **Monaco Editor:** Integration for real syntax highlighting and error squiggles.
-*   **Full Struct Support:** Implementation of struct methods and attribute access.
-*   **Array & Slices:** Expansion of the type checker to handle complex collections.
-*   **Interactive Terminal:** Integration of `xterm.js` for a true console experience.
+## Uso del Compilador
+
+### Línea de Comandos
+
+Compilar un archivo Mini-GO:
+
+```bash
+./backend/minigo ruta/a/programa.go
+```
+
+**En Windows (PowerShell):**
+```powershell
+.\backend\minigo.exe ruta\a\programa.go
+```
+
+Genera un ejecutable llamado `output` (o `output.exe` en Windows) en el directorio actual.
+
+### Ejecutar el Programa Compilado
+
+```bash
+./output
+```
+
+**En Windows:**
+```powershell
+.\output.exe
+```
+
+---
+
+## Ejecución del IDE
+
+```bash
+cd ide
+pnpm start
+```
+
+El IDE se abrirá con editor y terminal listos. Use el botón "Run" o Ctrl+R para compilar y ejecutar código.
+
+---
+
+## Características del Lenguaje Soportadas
+
+- **Variables:** `var x int = 10;`
+- **Tipos:** int, bool, string, char, void
+- **Estructuras:** `type Point struct { x int; y int; }`
+- **Arreglos:** Arreglos fijos `[5]int` y slices `[]int`
+- **Funciones:** Con parámetros y tipos de retorno
+- **Control de Flujo:** if/else, for loops, switch
+- **Operadores:** Aritméticos, lógicos, bitwise, comparación y asignación
+- **Funciones Incorporadas:** print, println, len, cap, append
+- **Detección de Errores:** Errores sintácticos, desajustes de tipo, variables no declaradas, redeclaraciones
+
+---
+
+## Estructura del Proyecto
+
+```
+mini-go/
+├── backend/
+│   ├── main.go
+│   ├── type_checker.go
+│   ├── symbol_table.go
+│   ├── encoder.go
+│   ├── minigo.g4
+│   ├── parser/
+│   ├── go.mod
+│   └── tests/
+├── ide/
+│   ├── src/
+│   ├── public/
+│   ├── package.json
+│   └── tsconfig.json
+└── README.md
+```
+
+---
