@@ -213,10 +213,14 @@ func (v *TypeVisitor) VisitSingleVarDecl(ctx *parser.SingleVarDeclContext) inter
 	}
 	if ctx.IdentifierList() != nil {
 		for _, id := range ctx.IdentifierList().AllIDENTIFIER() {
-			v.Symbols.Insert(id.GetText(), targetType)
-			v.NodeTypes[id] = targetType
-			if ident, found := v.Symbols.Lookup(id.GetText()); found {
-				v.SymbolMap[id] = ident
+			if err := v.Symbols.Insert(id.GetText(), targetType); err != nil {
+				v.reportError("Variable ya declarada",
+					fmt.Sprintf("el identificador '%s' ya fue declarado en este scope", id.GetText()), ctx)
+			} else {
+				v.NodeTypes[id] = targetType
+				if ident, found := v.Symbols.Lookup(id.GetText()); found {
+					v.SymbolMap[id] = ident
+				}
 			}
 		}
 	}
@@ -238,10 +242,14 @@ func (v *TypeVisitor) VisitSingleVarDeclNoExps(ctx *parser.SingleVarDeclNoExpsCo
 	}
 	if ctx.IdentifierList() != nil {
 		for _, id := range ctx.IdentifierList().AllIDENTIFIER() {
-			v.Symbols.Insert(id.GetText(), targetType)
-			v.NodeTypes[id] = targetType
-			if ident, found := v.Symbols.Lookup(id.GetText()); found {
-				v.SymbolMap[id] = ident
+			if err := v.Symbols.Insert(id.GetText(), targetType); err != nil {
+				v.reportError("Variable ya declarada",
+					fmt.Sprintf("el identificador '%s' ya fue declarado en este scope", id.GetText()), ctx)
+			} else {
+				v.NodeTypes[id] = targetType
+				if ident, found := v.Symbols.Lookup(id.GetText()); found {
+					v.SymbolMap[id] = ident
+				}
 			}
 		}
 	}
@@ -497,6 +505,9 @@ func (v *TypeVisitor) VisitOperand(ctx *parser.OperandContext) interface{} {
 			if found {
 				t = ident.Tipo
 				v.SymbolMap[ctx.IDENTIFIER()] = ident
+			} else {
+				v.reportError("Variable no declarada",
+					fmt.Sprintf("el identificador '%s' no ha sido declarado", name), ctx)
 			}
 		}
 	} else if ctx.Expression() != nil {

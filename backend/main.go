@@ -52,6 +52,7 @@ func main() {
 	if lexerErrors.HasErrors() || parserErrors.HasErrors() {
 		lexerErrors.PrintErrors()
 		parserErrors.PrintErrors()
+		os.Exit(1)
 	}
 
 	// Fase de Tipos (Semantic Analysis)
